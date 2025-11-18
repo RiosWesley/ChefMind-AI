@@ -223,10 +223,13 @@ async function handleNewMessage(
         );
         
         mediaId = media.id;
-        mediaUrl = normalizeMediaUrl(originalMediaUrl, wahaService);
+        const backendPublicUrl = process.env.BACKEND_PUBLIC_URL || 'http://backend:3001';
+        mediaUrl = `${backendPublicUrl}/api/media/${media.id}`;
       } catch (error) {
         console.error('Error downloading and storing media:', error);
-        mediaUrl = normalizeMediaUrl(originalMediaUrl, wahaService);
+        const backendPublicUrl = process.env.BACKEND_PUBLIC_URL || 'http://backend:3001';
+        const filename = originalMediaUrl.split('/').pop() || '';
+        mediaUrl = `${backendPublicUrl}/api/media/${filename}`;
       }
     }
   }

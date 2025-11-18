@@ -1,7 +1,7 @@
 export interface Media {
   id: string;
   ticketId: string;
-  messageId: string;
+  messageId?: string;
   filename: string;
   mimetype: string;
   fileSize: number;
@@ -13,7 +13,7 @@ export interface Media {
 
 export interface CreateMediaData {
   ticketId: string;
-  messageId: string;
+  messageId?: string;
   filename: string;
   mimetype: string;
   fileData: Buffer;

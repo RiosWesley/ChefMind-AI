@@ -25,7 +25,16 @@ export class MediaService {
     mimetype: string
   ): Promise<Media> {
     const wahaApiUrl = process.env.WAHA_API_URL || 'http://waha:3000';
-    const fullUrl = mediaUrl.startsWith('http') ? mediaUrl : `${wahaApiUrl}${mediaUrl}`;
+    
+    let fullUrl: string;
+    if (mediaUrl.startsWith('http://localhost') || mediaUrl.startsWith('http://127.0.0.1')) {
+      const urlPath = mediaUrl.replace(/https?:\/\/localhost:\d+/, '').replace(/https?:\/\/127\.0\.0\.1:\d+/, '');
+      fullUrl = `${wahaApiUrl}${urlPath}`;
+    } else if (mediaUrl.startsWith('http')) {
+      fullUrl = mediaUrl;
+    } else {
+      fullUrl = `${wahaApiUrl}${mediaUrl}`;
+    }
     
     try {
       const response = await axios.get(fullUrl, {
@@ -50,7 +59,7 @@ export class MediaService {
 
       const mediaData: CreateMediaData = {
         ticketId,
-        messageId: messageId || '',
+        messageId: messageId || undefined,
         filename,
         mimetype,
         fileData,
@@ -78,7 +87,7 @@ export class MediaService {
     `, [
       id,
       data.ticketId,
-      data.messageId,
+      data.messageId || null,
       data.filename,
       data.mimetype,
       data.fileData.length,
@@ -113,6 +122,23 @@ export class MediaService {
       WHERE message_id = $1
       LIMIT 1
     `, [messageId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToMedia(result.rows[0]);
+  }
+
+  async getMediaByFilename(filename: string): Promise<Media | null> {
+    const result = await this.db.query(`
+      SELECT id, ticket_id, message_id, filename, mimetype, 
+             file_size, file_data, original_url, transcription, created_at
+      FROM media
+      WHERE filename = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [filename]);
 
     if (result.rows.length === 0) {
       return null;

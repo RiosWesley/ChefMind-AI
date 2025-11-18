@@ -95,6 +95,23 @@ export class MessageService {
     return this.mapRowToMessage(result.rows[0]);
   }
 
+  async getMessageByWahaId(wahaMessageId: string): Promise<Message | null> {
+    const result = await this.db.query(`
+      SELECT id, ticket_id, contact_number, direction, message_type, 
+             content, media_id, waha_message_id, is_ai_generated, created_at
+      FROM messages
+      WHERE waha_message_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [wahaMessageId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToMessage(result.rows[0]);
+  }
+
   private mapRowToMessage(row: {
     id: string;
     ticket_id: string;

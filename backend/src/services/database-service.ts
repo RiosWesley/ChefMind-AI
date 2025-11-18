@@ -95,7 +95,7 @@ export class DatabaseService {
         CREATE TABLE IF NOT EXISTS media (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-          message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
           filename VARCHAR(255) NOT NULL,
           mimetype VARCHAR(100) NOT NULL,
           file_size BIGINT NOT NULL,
@@ -111,19 +111,41 @@ export class DatabaseService {
         CREATE INDEX IF NOT EXISTS idx_media_message_id ON media(message_id);
       `);
 
+      await client.query('COMMIT');
+      
+      // Migration: Make message_id nullable (for existing tables)
+      // This needs to be outside the transaction to avoid rollback issues
       try {
-        await client.query(`
+        const checkResult = await this.pool.query(`
+          SELECT column_name, is_nullable 
+          FROM information_schema.columns 
+          WHERE table_name = 'media' AND column_name = 'message_id';
+        `);
+        
+        if (checkResult.rows.length > 0 && checkResult.rows[0].is_nullable === 'NO') {
+          await this.pool.query(`
+            ALTER TABLE media 
+            ALTER COLUMN message_id DROP NOT NULL;
+          `);
+          console.log('Migration: message_id column in media table is now nullable');
+        }
+      } catch (error) {
+        console.error('Error altering media.message_id column:', error);
+        // Don't throw - this is a migration that may fail if column doesn't exist
+      }
+
+      // Add foreign key constraint (outside transaction)
+      try {
+        await this.pool.query(`
           ALTER TABLE messages 
           ADD CONSTRAINT fk_messages_media 
           FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE SET NULL;
         `);
       } catch (error) {
         if (!(error as Error).message.includes('already exists')) {
-          throw error;
+          console.error('Error adding fk_messages_media constraint:', error);
         }
       }
-
-      await client.query('COMMIT');
       console.log('Database migrations completed');
     } catch (error) {
       await client.query('ROLLBACK');
