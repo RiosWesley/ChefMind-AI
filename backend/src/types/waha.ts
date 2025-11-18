@@ -11,11 +11,30 @@ export interface WahaMessage {
   mimetype?: string;
   caption?: string;
   hasMedia?: boolean;
-  media?: any;
+  media?: {
+    url?: string;
+    mediaUrl?: string;
+    mimetype?: string;
+    filename?: string;
+  };
   _data?: {
     Info?: {
       Type?: string;
       MediaType?: string;
+    };
+    Message?: {
+      audioMessage?: {
+        url?: string;
+        mimetype?: string;
+      };
+      voiceMessage?: {
+        url?: string;
+        mimetype?: string;
+      };
+      ptt?: {
+        url?: string;
+        mimetype?: string;
+      };
     };
   };
 }

@@ -32,6 +32,35 @@ export class WahaService {
       throw error;
     }
   }
+
+  async getMediaUrl(messageId: string): Promise<string | null> {
+    try {
+      const response = await this.client.get(`/api/downloadMedia/${messageId}`);
+      if (response.data && response.data.url) {
+        return response.data.url;
+      }
+      return null;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Error getting media URL:', error.response?.data || error.message);
+      }
+      return null;
+    }
+  }
+
+  async downloadMedia(messageId: string): Promise<Buffer | null> {
+    try {
+      const response = await this.client.get(`/api/downloadMedia/${messageId}`, {
+        responseType: 'arraybuffer',
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Error downloading media:', error.response?.data || error.message);
+      }
+      return null;
+    }
+  }
 }
 
 

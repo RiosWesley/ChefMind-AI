@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { WahaWebhookEvent, WahaMessage } from '../types/waha';
 import { TicketService } from '../services/ticket-service';
+import { WahaService } from '../services/waha-service';
 import { N8nService } from '../services/n8n-service';
 import { TicketStatus } from '../types/ticket';
 
 export const createWebhookRouter = (
   ticketService: TicketService,
+  wahaService: WahaService,
   n8nService: N8nService
 ): Router => {
   const router = Router();
@@ -39,12 +41,24 @@ export const createWebhookRouter = (
         type: messageType,
       };
 
-      const messageTypes = ['chat', 'text', 'image', 'video', 'audio', 'document', 'voice', 'ptt', 'sticker'];
+      if (message.hasMedia || messageType !== 'text') {
+        console.log('Mensagem com mídia detectada:', {
+          type: messageType,
+          hasMedia: message.hasMedia,
+          mediaUrl: message.mediaUrl,
+          media: message.media ? Object.keys(message.media) : null,
+          _dataType: message._data?.Info?.Type,
+          _dataMediaType: message._data?.Info?.MediaType,
+        });
+      }
+
+      const messageTypes = ['chat', 'text', 'image', 'video', 'audio', 'document', 'voice', 'ptt', 'sticker', 'media'];
       if (messageTypes.includes(normalizedMessage.type)) {
-        await handleNewMessage(normalizedMessage, ticketService, n8nService);
+        await handleNewMessage(normalizedMessage, ticketService, wahaService, n8nService);
         return res.status(200).json({ received: true });
       }
 
+      console.log(`Tipo de mensagem não processado: ${normalizedMessage.type}`);
       res.status(200).json({ received: true });
     } catch (error) {
       console.error('Error processing webhook:', error);
@@ -56,8 +70,33 @@ export const createWebhookRouter = (
 };
 
 function normalizeMessageType(message: WahaMessage): string {
+  if (message._data?.Info?.MediaType) {
+    const mediaType = message._data.Info.MediaType.toLowerCase();
+    if (mediaType === 'ptt' || mediaType === 'voice' || mediaType === 'audio') {
+      return 'audio';
+    }
+    if (mediaType === 'image' || mediaType === 'video' || mediaType === 'document') {
+      return mediaType;
+    }
+  }
+
+  if (message._data?.Message?.audioMessage || message._data?.Message?.voiceMessage || message._data?.Message?.ptt) {
+    return 'audio';
+  }
+
   if (message.type) {
-    return message.type.toLowerCase();
+    const type = message.type.toLowerCase();
+    if (type === 'ptt' || type === 'voice') {
+      return 'audio';
+    }
+    if (type === 'media' && message._data?.Info?.MediaType) {
+      const mediaType = message._data.Info.MediaType.toLowerCase();
+      if (mediaType === 'ptt' || mediaType === 'voice' || mediaType === 'audio') {
+        return 'audio';
+      }
+      return mediaType;
+    }
+    return type;
   }
 
   if (message._data?.Info?.Type) {
@@ -65,12 +104,28 @@ function normalizeMessageType(message: WahaMessage): string {
     if (type === 'text' || type === 'chat') {
       return 'text';
     }
+    if (type === 'ptt' || type === 'voice') {
+      return 'audio';
+    }
+    if (type === 'media' && message._data?.Info?.MediaType) {
+      const mediaType = message._data.Info.MediaType.toLowerCase();
+      if (mediaType === 'ptt' || mediaType === 'voice' || mediaType === 'audio') {
+        return 'audio';
+      }
+      return mediaType;
+    }
     return type;
   }
 
   if (message.hasMedia) {
-    if (message._data?.Info?.MediaType) {
-      return message._data.Info.MediaType.toLowerCase();
+    if (message.mimetype?.startsWith('audio/')) {
+      return 'audio';
+    }
+    if (message.mimetype?.startsWith('image/')) {
+      return 'image';
+    }
+    if (message.mimetype?.startsWith('video/')) {
+      return 'video';
     }
     return 'media';
   }
@@ -82,9 +137,22 @@ function normalizeMessageType(message: WahaMessage): string {
   return 'text';
 }
 
+function normalizeMediaUrl(url: string, wahaService: WahaService): string {
+  const backendPublicUrl = process.env.BACKEND_PUBLIC_URL || 'http://backend:3001';
+  
+  const pathMatch = url.match(/\/api\/files\/[^/]+\/(.+)$/);
+  if (pathMatch) {
+    const filename = pathMatch[1];
+    return `${backendPublicUrl}/api/media/${filename}`;
+  }
+  
+  return url;
+}
+
 async function handleNewMessage(
   message: WahaMessage,
   ticketService: TicketService,
+  wahaService: WahaService,
   n8nService: N8nService
 ): Promise<void> {
   const existingTicket = await ticketService.getTicketByContact(message.from);
@@ -93,8 +161,55 @@ async function handleNewMessage(
   const messageText = message.body || message.caption || `[${messageType}]`;
   let mediaUrl = message.mediaUrl || undefined;
   
-  if (message.hasMedia && message.media && typeof message.media === 'object') {
-    mediaUrl = message.media.url || message.media.mediaUrl || mediaUrl;
+  if (message.hasMedia) {
+    if (message.media && typeof message.media === 'object' && 'url' in message.media) {
+      let extractedUrl = (message.media as { url?: string; mediaUrl?: string }).url || 
+                         (message.media as { url?: string; mediaUrl?: string }).mediaUrl || 
+                         undefined;
+      
+      if (extractedUrl) {
+        mediaUrl = normalizeMediaUrl(extractedUrl, wahaService);
+        console.log('Media URL extraída de message.media:', mediaUrl);
+      }
+    }
+    
+    if (!mediaUrl && message.mediaUrl) {
+      mediaUrl = normalizeMediaUrl(message.mediaUrl, wahaService);
+      console.log('Media URL extraída de message.mediaUrl:', mediaUrl);
+    }
+    
+    if (!mediaUrl && message._data?.Message) {
+      if (message._data.Message.audioMessage?.url) {
+        mediaUrl = normalizeMediaUrl(message._data.Message.audioMessage.url, wahaService);
+        console.log('Media URL extraída de audioMessage:', mediaUrl);
+      } else if (message._data.Message.voiceMessage?.url) {
+        mediaUrl = normalizeMediaUrl(message._data.Message.voiceMessage.url, wahaService);
+        console.log('Media URL extraída de voiceMessage:', mediaUrl);
+      } else if (message._data.Message.ptt?.url) {
+        mediaUrl = normalizeMediaUrl(message._data.Message.ptt.url, wahaService);
+        console.log('Media URL extraída de ptt:', mediaUrl);
+      }
+    }
+
+    if (!mediaUrl && message.id) {
+      console.log('Tentando obter URL de mídia via API do WAHA para messageId:', message.id);
+      const apiMediaUrl = await wahaService.getMediaUrl(message.id);
+      if (apiMediaUrl) {
+        mediaUrl = normalizeMediaUrl(apiMediaUrl, wahaService);
+        console.log('Media URL obtida via API do WAHA:', mediaUrl);
+      }
+    }
+
+    if (!mediaUrl) {
+      console.log('AVISO: Mensagem com mídia mas sem URL encontrada. Payload:', JSON.stringify({
+        hasMedia: message.hasMedia,
+        mediaUrl: message.mediaUrl,
+        media: message.media,
+        messageId: message.id,
+        _dataMessage: message._data?.Message ? Object.keys(message._data.Message) : null,
+        _dataInfo: message._data?.Info,
+      }, null, 2));
+    }
   }
 
   let ticket;
