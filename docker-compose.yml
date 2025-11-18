@@ -76,6 +76,24 @@ services:
     ports:
       - "5678:5678"
 
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    platform: linux/amd64
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: openai_whisper
+      ASR_LANGUAGE: pt
+      ASR_DEVICE: gpu
+    ports:
+      - "9000:9000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
 volumes:
   pgdata:
   waha_sessions:
