@@ -10,6 +10,41 @@ export const createTicketsRouter = (
 ): Router => {
   const router = Router();
 
+  /**
+   * @swagger
+   * /api/tickets/{id}:
+   *   get:
+   *     summary: Busca um ticket por ID
+   *     tags: [Tickets]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: ID do ticket
+   *     responses:
+   *       200:
+   *         description: Ticket encontrado com suas mensagens
+   *         content:
+   *           application/json:
+   *             schema:
+   *               allOf:
+   *                 - $ref: '#/components/schemas/Ticket'
+   *                 - type: object
+   *                   properties:
+   *                     messages:
+   *                       type: array
+   *                       items:
+   *                         $ref: '#/components/schemas/Message'
+   *       404:
+   *         description: Ticket não encontrado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.get('/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -31,6 +66,30 @@ export const createTicketsRouter = (
     }
   });
 
+  /**
+   * @swagger
+   * /api/tickets/{id}/messages:
+   *   get:
+   *     summary: Busca todas as mensagens de um ticket
+   *     tags: [Tickets]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: ID do ticket
+   *     responses:
+   *       200:
+   *         description: Lista de mensagens do ticket
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Message'
+   */
   router.get('/:id/messages', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -43,6 +102,35 @@ export const createTicketsRouter = (
     }
   });
 
+  /**
+   * @swagger
+   * /api/tickets/{id}/close:
+   *   post:
+   *     summary: Fecha um ticket
+   *     tags: [Tickets]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: ID do ticket
+   *     responses:
+   *       200:
+   *         description: Ticket fechado com sucesso
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       404:
+   *         description: Ticket não encontrado
+   */
   router.post('/:id/close', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -59,6 +147,36 @@ export const createTicketsRouter = (
     }
   });
 
+  /**
+   * @swagger
+   * /api/tickets/contact/{contactNumber}:
+   *   get:
+   *     summary: Busca ticket ativo por número de contato
+   *     tags: [Tickets]
+   *     parameters:
+   *       - in: path
+   *         name: contactNumber
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Número do contato (ex: 5511999999999@lid)
+   *     responses:
+   *       200:
+   *         description: Ticket encontrado com suas mensagens
+   *         content:
+   *           application/json:
+   *             schema:
+   *               allOf:
+   *                 - $ref: '#/components/schemas/Ticket'
+   *                 - type: object
+   *                   properties:
+   *                     messages:
+   *                       type: array
+   *                       items:
+   *                         $ref: '#/components/schemas/Message'
+   *       404:
+   *         description: Nenhum ticket ativo encontrado
+   */
   router.get('/contact/:contactNumber', async (req: Request, res: Response) => {
     try {
       const { contactNumber } = req.params;

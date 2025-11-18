@@ -12,6 +12,8 @@ import { createTicketsRouter } from './routes/tickets';
 import { createMessagesRouter } from './routes/messages';
 import { createToolsRouter } from './routes/tools';
 import { ToolService } from './services/tool-service';
+import { setupSwagger } from './config/swagger';
+import { LlmDocService } from './services/llm-doc-service';
 
 export const createServer = async (): Promise<Express> => {
   const app = express();
@@ -35,6 +37,42 @@ export const createServer = async (): Promise<Express> => {
   const toolService = new ToolService(ticketService);
   app.use('/api/tools', createToolsRouter(toolService));
 
+  /**
+   * @swagger
+   * /api/media/{id}:
+   *   get:
+   *     summary: Baixa uma mídia armazenada
+   *     tags: [Media]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: ID da mídia (UUID, filename ou WAHA message ID)
+   *     responses:
+   *       200:
+   *         description: Arquivo binário da mídia
+   *         content:
+   *           image/*:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *           video/*:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *           audio/*:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *           application/*:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *       404:
+   *         description: Mídia não encontrada
+   */
   app.get('/api/media/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -67,12 +105,46 @@ export const createServer = async (): Promise<Express> => {
     }
   });
 
+  /**
+   * @swagger
+   * /health:
+   *   get:
+   *     summary: Health check
+   *     tags: [Health]
+   *     responses:
+   *       200:
+   *         description: API está funcionando
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: ok
+   */
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
   });
 
   app.get('/webhook/test', (_req, res) => {
     res.json({ message: 'Webhook endpoint is working' });
+  });
+
+  // Swagger documentation
+  setupSwagger(app);
+
+  // LLM documentation endpoint
+  const llmDocService = new LlmDocService();
+  app.get('/llm.txt', (_req, res) => {
+    try {
+      const doc = llmDocService.generateLlmTxt();
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.send(doc);
+    } catch (error) {
+      console.error('Error generating LLM documentation:', error);
+      res.status(500).json({ error: 'Failed to generate documentation' });
+    }
   });
 
   return app;

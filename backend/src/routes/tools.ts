@@ -4,6 +4,25 @@ import { ToolService } from '../services/tool-service';
 export const createToolsRouter = (toolService: ToolService): Router => {
   const router = Router();
 
+  /**
+   * @swagger
+   * /api/tools:
+   *   get:
+   *     summary: Lista todas as ferramentas disponíveis para IA
+   *     tags: [Tools]
+   *     responses:
+   *       200:
+   *         description: Lista de ferramentas disponíveis
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 tools:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/Tool'
+   */
   router.get('/', (_req: Request, res: Response) => {
     try {
       const tools = toolService.getAvailableTools();
@@ -14,6 +33,56 @@ export const createToolsRouter = (toolService: ToolService): Router => {
     }
   });
 
+  /**
+   * @swagger
+   * /api/tools/execute:
+   *   post:
+   *     summary: Executa uma ferramenta
+   *     tags: [Tools]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - tool
+   *               - parameters
+   *             properties:
+   *               tool:
+   *                 type: string
+   *                 description: Nome da ferramenta
+   *                 example: close_ticket
+   *               parameters:
+   *                 type: object
+   *                 description: Parâmetros da ferramenta
+   *                 example:
+   *                   ticketId: "uuid-do-ticket"
+   *     responses:
+   *       200:
+   *         description: Ferramenta executada com sucesso
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 result:
+   *                   type: object
+   *       400:
+   *         description: Erro na execução da ferramenta
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                   example: false
+   *                 error:
+   *                   type: string
+   */
   router.post('/execute', async (req: Request, res: Response) => {
     try {
       const { tool, parameters } = req.body;

@@ -13,6 +13,7 @@ Sistema completo de gerenciamento de tickets para WhatsApp que integra WAHA, n8n
 - [Como Iniciar](#como-iniciar)
 - [Estrutura do Banco de Dados](#estrutura-do-banco-de-dados)
 - [API Endpoints](#api-endpoints)
+- [Documentação da API](#documentação-da-api)
 - [Fluxo de Dados](#fluxo-de-dados)
 - [Testes](#testes)
 - [Troubleshooting](#troubleshooting)
@@ -28,6 +29,8 @@ Este sistema permite:
 - Enviar dados para n8n para processamento com IA
 - Enviar respostas de volta para o WhatsApp
 - Fechar tickets automaticamente após 15 minutos de inatividade
+- Documentação interativa da API com Swagger
+- Documentação otimizada para LLMs em `/llm.txt`
 
 ## 🏗️ Arquitetura
 
@@ -556,6 +559,82 @@ Resposta de erro:
   "success": false,
   "error": "Ticket with id 'uuid-do-ticket' not found"
 }
+```
+
+## 📚 Documentação da API
+
+O backend inclui documentação completa e interativa da API através do Swagger, além de uma versão otimizada para LLMs.
+
+### Swagger UI (Documentação Interativa)
+
+Acesse a documentação interativa do Swagger em:
+
+```
+http://localhost:3001/api-docs
+```
+
+ou
+
+```
+http://backend:3001/api-docs
+```
+
+**Recursos do Swagger:**
+- Interface visual interativa
+- Teste de endpoints diretamente na interface
+- Schemas completos de todos os modelos
+- Exemplos de requisições e respostas
+- Documentação de todos os parâmetros e códigos de status
+
+### Documentação para LLMs (`/llm.txt`)
+
+A rota `/llm.txt` fornece documentação otimizada para Large Language Models:
+
+```
+http://localhost:3001/llm.txt
+```
+
+**Características:**
+- Formato texto simples otimizado para LLMs
+- Gerado dinamicamente a partir do Swagger
+- Atualiza automaticamente quando o Swagger é modificado
+- Inclui todos os endpoints, schemas, fluxos de dados e notas importantes
+- Ideal para integração com sistemas de IA
+
+**Conteúdo incluído:**
+- Base URLs disponíveis
+- Todos os endpoints organizados por categoria
+- Parâmetros e request bodies detalhados
+- Schemas de dados (Ticket, Message, Tool)
+- Fluxos de dados do sistema
+- Notas importantes sobre funcionamento
+
+### Atualização Automática
+
+A documentação é gerada dinamicamente:
+- **Swagger**: Atualizado automaticamente quando você adiciona/modifica anotações `@swagger` nas rotas
+- **llm.txt**: Gerado automaticamente a partir do Swagger, sempre sincronizado
+
+**Para adicionar novas rotas à documentação:**
+1. Adicione anotações `@swagger` acima da rota
+2. A documentação será atualizada automaticamente
+3. Não é necessário recompilar ou reiniciar manualmente
+
+### Exemplo de Uso
+
+**Acessar Swagger:**
+```bash
+# Abra no navegador
+http://localhost:3001/api-docs
+```
+
+**Acessar llm.txt:**
+```bash
+# Via curl
+curl http://localhost:3001/llm.txt
+
+# Ou abra no navegador
+http://localhost:3001/llm.txt
 ```
 
 ## 🔄 Fluxo de Dados

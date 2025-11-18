@@ -11,6 +11,51 @@ export const createMessagesRouter = (
 ): Router => {
   const router = Router();
 
+  /**
+   * @swagger
+   * /api/messages:
+   *   post:
+   *     summary: Envia uma mensagem para o WhatsApp
+   *     description: Envia uma mensagem para o contato associado ao ticket. O sessionName é gerenciado automaticamente.
+   *     tags: [Messages]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - ticketId
+   *               - message
+   *             properties:
+   *               ticketId:
+   *                 type: string
+   *                 format: uuid
+   *                 description: ID do ticket
+   *               message:
+   *                 type: string
+   *                 description: Texto da mensagem a ser enviada
+   *               mediaUrl:
+   *                 type: string
+   *                 format: uri
+   *                 description: URL da mídia (opcional)
+   *     responses:
+   *       200:
+   *         description: Mensagem enviada com sucesso
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Campos obrigatórios faltando
+   *       404:
+   *         description: Ticket não encontrado
+   */
   router.post('/', async (req: Request, res: Response) => {
     try {
       const { ticketId, message, mediaUrl } = req.body;
