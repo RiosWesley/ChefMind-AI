@@ -10,6 +10,7 @@ Sistema completo de gerenciamento de tickets para WhatsApp que integra WAHA, n8n
 - [Pré-requisitos](#pré-requisitos)
 - [Instalação](#instalação)
 - [Configuração](#configuração)
+- [Integração com LM Studio](#integração-com-lm-studio)
 - [Como Iniciar](#como-iniciar)
 - [Estrutura do Banco de Dados](#estrutura-do-banco-de-dados)
 - [API Endpoints](#api-endpoints)
@@ -132,6 +133,8 @@ N8N_WEBHOOK_URL=http://host.docker.internal:5678/webhook-test/test
 
 ### 3. Configurar Whisper (CPU ou GPU)
 
+O Whisper é usado automaticamente pelo backend para transcrever áudios recebidos via WhatsApp.
+
 **Para CPU** (mais lento, mas funciona sem GPU):
 Edite `docker-compose.yml` e altere o serviço `whisper`:
 
@@ -151,6 +154,35 @@ whisper:
 
 **Para GPU** (mais rápido, requer NVIDIA GPU):
 O `docker-compose.yml` já está configurado para GPU. Certifique-se de ter o NVIDIA Container Toolkit instalado.
+
+**Modelos disponíveis:**
+- `tiny` - Mais rápido, menor precisão
+- `base` - Balanceado (recomendado para CPU)
+- `small` - Melhor precisão (padrão no docker-compose.yml)
+- `medium` - Alta precisão, mais lento
+- `large` - Máxima precisão, muito lento
+
+**Rotas do Whisper API:**
+
+O backend usa automaticamente a rota `/asr` do Whisper. Se precisar usar diretamente:
+
+```bash
+# Transcrever áudio
+POST http://localhost:9000/asr
+Content-Type: multipart/form-data
+
+Form Data:
+- audio_file: (arquivo de áudio)
+- language: pt
+- response_format: text
+```
+
+**Como funciona:**
+1. Quando um áudio é recebido via WhatsApp, o backend automaticamente:
+   - Baixa o áudio do WAHA
+   - Envia para o Whisper via `/asr`
+   - Salva a transcrição no banco de dados
+   - Inclui a transcrição no payload enviado para o n8n
 
 ### 4. Construir e Iniciar os Serviços
 
@@ -194,6 +226,106 @@ As variáveis são configuradas no `docker-compose.yml`:
 | `DATABASE_URL` | URL de conexão do PostgreSQL | `postgresql://default:default@postgres:5432/default` |
 | `WHISPER_API_URL` | URL da API do Whisper | `http://whisper:9000` |
 | `BACKEND_PUBLIC_URL` | URL pública do backend (para mídias) | `http://backend:3001` |
+
+## 🤖 Integração com LM Studio
+
+O LM Studio pode ser usado no n8n para processar mensagens com modelos de linguagem locais. Aqui estão as recomendações:
+
+### Instalação do LM Studio
+
+1. **Baixe e instale o LM Studio:**
+   - Acesse: https://lmstudio.ai/
+   - Baixe a versão para seu sistema operacional
+   - Instale e abra o aplicativo
+
+2. **Configure o servidor local:**
+   - No LM Studio, vá para a aba "Local Server"
+   - Clique em "Start Server"
+   - Anote a URL (geralmente `http://localhost:1234`)
+
+### Modelos Recomendados para Português
+
+**Para uso geral (recomendado):**
+- **Qwen3-VL-4B** - Excelente para português, rápido e eficiente e multimodal.
+- **LFM2-8B-A1B** - Excelente para tarefas que necessitem de maior proeficiência de Tools, mas sem abrir mão de ser leve.
+
+
+### Configuração no n8n
+
+1. **No seu workflow do n8n, adicione um nó HTTP Request:**
+   - **Method:** POST
+   - **URL:** `http://host.docker.internal:1234/v1/chat/completions`
+   - **Headers:**
+     ```
+     Content-Type: application/json
+     ```
+   - **Body (JSON):**
+     ```json
+     {
+       "model": "llama-3.1-8b-instruct",
+       "messages": [
+         {
+           "role": "system",
+           "content": "Você é um assistente útil e prestativo. Responda sempre em português brasileiro."
+         },
+         {
+           "role": "user",
+           "content": "{{ $json.message }}"
+         }
+       ],
+       "temperature": 0.7,
+       "max_tokens": 500
+     }
+     ```
+
+2. **Processar a resposta:**
+   - A resposta virá em `{{ $json.choices[0].message.content }}`
+   - Use esse conteúdo para enviar de volta via `/api/messages`
+
+### Exemplo de Workflow Completo com LM Studio
+
+```
+[Webhook] → [Set] → [HTTP Request (LM Studio)] → [Set] → [HTTP Request (Backend)]
+     ↓         ↓              ↓                      ↓              ↓
+  Recebe   Extrai      Envia para            Extrai resposta   Envia para
+  mensagem dados       LM Studio             da IA             WhatsApp
+```
+
+### Configurações Recomendadas
+
+**Para respostas rápidas:**
+```json
+{
+  "temperature": 0.7,
+  "max_tokens": 300,
+  "top_p": 0.9
+}
+```
+
+**Para respostas mais criativas:**
+```json
+{
+  "temperature": 0.9,
+  "max_tokens": 500,
+  "top_p": 0.95
+}
+```
+
+**Para respostas mais precisas:**
+```json
+{
+  "temperature": 0.3,
+  "max_tokens": 400,
+  "top_p": 0.8
+}
+```
+
+### Dicas de Uso
+
+- **Contexto do Ticket:** Inclua o histórico de mensagens no prompt para melhor contexto
+- **Instruções do Sistema:** Defina claramente o papel do assistente no `system` message
+- **Token Limit:** Ajuste `max_tokens` conforme necessário (mais tokens = respostas mais longas)
+- **Performance:** Modelos menores (7B-8B) são mais rápidos e suficientes para a maioria dos casos
 
 ## 🎬 Como Iniciar
 
