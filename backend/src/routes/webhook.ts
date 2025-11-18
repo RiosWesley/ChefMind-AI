@@ -21,8 +21,9 @@ export const createWebhookRouter = (
     try {
       const body = req.body;
       
-      let event: WahaWebhookEvent;
+      let event: WahaWebhookEvent | undefined;
       let message: WahaMessage;
+      let sessionName = 'default';
 
       if (body.event) {
         event = body as WahaWebhookEvent;
@@ -30,8 +31,10 @@ export const createWebhookRouter = (
           return res.status(200).json({ received: true });
         }
         message = event.payload as WahaMessage;
+        sessionName = event.session || 'default';
       } else if (body.type || body.from) {
         message = body as WahaMessage;
+        sessionName = body.session || 'default';
       } else {
         return res.status(200).json({ received: true });
       }
@@ -59,7 +62,7 @@ export const createWebhookRouter = (
 
       const messageTypes = ['chat', 'text', 'image', 'video', 'audio', 'document', 'voice', 'ptt', 'sticker', 'media'];
       if (messageTypes.includes(normalizedMessage.type)) {
-        await handleNewMessage(normalizedMessage, ticketService, messageService, mediaService, wahaService, n8nService);
+        await handleNewMessage(normalizedMessage, sessionName, ticketService, messageService, mediaService, wahaService, n8nService);
         return res.status(200).json({ received: true });
       }
 
@@ -156,6 +159,7 @@ function normalizeMediaUrl(url: string, wahaService: WahaService): string {
 
 async function handleNewMessage(
   message: WahaMessage,
+  sessionName: string,
   ticketService: TicketService,
   messageService: MessageService,
   mediaService: MediaService,
@@ -174,6 +178,7 @@ async function handleNewMessage(
   } else {
     ticket = await ticketService.createTicket({
       contactNumber: message.from,
+      sessionName: sessionName,
     });
   }
 

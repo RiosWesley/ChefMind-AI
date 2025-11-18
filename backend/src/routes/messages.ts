@@ -24,7 +24,7 @@ export const createMessagesRouter = (
         return res.status(404).json({ error: 'Ticket not found' });
       }
 
-      await wahaService.sendMessage(ticket.contactNumber, message);
+      await wahaService.sendMessage(ticket.contactNumber, message, ticket.sessionName);
 
       await messageService.createMessage({
         ticketId: ticket.id,

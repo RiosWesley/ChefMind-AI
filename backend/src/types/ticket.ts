@@ -6,6 +6,7 @@ export enum TicketStatus {
 export interface Ticket {
   id: string;
   contactNumber: string;
+  sessionName: string;
   status: TicketStatus;
   createdAt: Date;
   lastInteractionAt: Date;
@@ -14,6 +15,7 @@ export interface Ticket {
 
 export interface CreateTicketData {
   contactNumber: string;
+  sessionName: string;
 }
 
 

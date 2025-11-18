@@ -17,9 +17,10 @@ export class WahaService {
     });
   }
 
-  async sendMessage(chatId: string, message: string): Promise<void> {
+  async sendMessage(chatId: string, message: string, sessionName: string = 'default'): Promise<void> {
     try {
       const response = await this.client.post('/api/sendText', {
+        session: sessionName,
         chatId,
         text: message,
       });

@@ -46,17 +46,17 @@ export class TicketService {
   async createTicket(data: CreateTicketData): Promise<Ticket> {
     const id = uuidv4();
     const result = await this.db.query(`
-      INSERT INTO tickets (id, contact_number, status, created_at, last_interaction_at)
-      VALUES ($1, $2, $3, NOW(), NOW())
-      RETURNING id, contact_number, status, created_at, last_interaction_at, closed_at
-    `, [id, data.contactNumber, TicketStatus.OPEN]);
+      INSERT INTO tickets (id, contact_number, session_name, status, created_at, last_interaction_at)
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      RETURNING id, contact_number, session_name, status, created_at, last_interaction_at, closed_at
+    `, [id, data.contactNumber, data.sessionName, TicketStatus.OPEN]);
 
     return this.mapRowToTicket(result.rows[0]);
   }
 
   async getTicket(id: string): Promise<Ticket | null> {
     const result = await this.db.query(`
-      SELECT id, contact_number, status, created_at, last_interaction_at, closed_at
+      SELECT id, contact_number, session_name, status, created_at, last_interaction_at, closed_at
       FROM tickets
       WHERE id = $1
     `, [id]);
@@ -99,7 +99,7 @@ export class TicketService {
       UPDATE tickets
       SET ${setClauses.join(', ')}
       WHERE id = $${paramIndex}
-      RETURNING id, contact_number, status, created_at, last_interaction_at, closed_at
+      RETURNING id, contact_number, session_name, status, created_at, last_interaction_at, closed_at
     `, values);
 
     if (result.rows.length === 0) {
@@ -130,7 +130,7 @@ export class TicketService {
 
   async getTicketByContact(contactNumber: string): Promise<Ticket | null> {
     const result = await this.db.query(`
-      SELECT id, contact_number, status, created_at, last_interaction_at, closed_at
+      SELECT id, contact_number, session_name, status, created_at, last_interaction_at, closed_at
       FROM tickets
       WHERE contact_number = $1 AND status = $2
       ORDER BY created_at DESC
@@ -147,6 +147,7 @@ export class TicketService {
   private mapRowToTicket(row: {
     id: string;
     contact_number: string;
+    session_name: string;
     status: string;
     created_at: Date;
     last_interaction_at: Date;
@@ -155,6 +156,7 @@ export class TicketService {
     return {
       id: row.id,
       contactNumber: row.contact_number,
+      sessionName: row.session_name,
       status: row.status as TicketStatus,
       createdAt: new Date(row.created_at),
       lastInteractionAt: new Date(row.last_interaction_at),

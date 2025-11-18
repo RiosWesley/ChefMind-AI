@@ -60,6 +60,7 @@ Este sistema permite:
 
 ### Gerenciamento de Tickets
 - Criação automática de tickets para cada contato
+- Armazenamento automático do session name do WAHA
 - Fechamento automático após 15 minutos de inatividade
 - Fechamento manual via API
 - Busca de tickets por ID ou número de contato
@@ -80,6 +81,7 @@ Este sistema permite:
 - Envio automático de novas mensagens para webhook do n8n
 - Recebimento de respostas do n8n para enviar ao WhatsApp
 - Payload completo com ticketId, mensagem, tipo e URL de mídia
+- Session name gerenciado automaticamente pelo backend
 
 ## 📦 Pré-requisitos
 
@@ -190,39 +192,53 @@ As variáveis são configuradas no `docker-compose.yml`:
 | `WHISPER_API_URL` | URL da API do Whisper | `http://whisper:9000` |
 | `BACKEND_PUBLIC_URL` | URL pública do backend (para mídias) | `http://backend:3001` |
 
-### Configurar WAHA
-
-1. Acesse o dashboard do WAHA: http://localhost:3000
-2. Login: `admin` / Senha: `12345678`
-3. Escaneie o QR Code do WhatsApp
-4. O webhook já está configurado para `http://backend:3001/webhook`
-
-### Configurar n8n
-
-1. Acesse o n8n: http://localhost:5678
-2. Crie um workflow
-3. Adicione um nó "Webhook"
-4. Configure a URL do webhook (ex: `/webhook-test/test`)
-5. **IMPORTANTE**: Ative o workflow (toggle no canto superior direito)
-6. O webhook receberá os seguintes dados:
-
-```json
-{
-  "message": "Texto da mensagem",
-  "contactNumber": "5511999999999@c.us",
-  "ticketId": "uuid-do-ticket",
-  "messageType": "text|audio|image|video|document",
-  "mediaUrl": "http://backend:3001/api/media/{id}" // se houver mídia
-}
-```
-
 ## 🎬 Como Iniciar
 
-### Iniciar Todos os Serviços
+### 1. Iniciar Todos os Serviços
 
 ```bash
 docker compose up -d
 ```
+
+Aguarde alguns segundos para todos os serviços iniciarem. Você pode verificar o status com:
+
+```bash
+docker compose ps
+```
+
+### 2. Acessar e Configurar o n8n
+
+1. **Acesse o n8n:**
+   - Abra seu navegador em: http://localhost:5678
+   - Faça login ou crie uma conta (primeira vez)
+
+2. **Importar o Workflow:**
+   - No n8n, clique em **"Workflows"** no menu lateral
+   - Clique em **"Import from File"** ou use o botão **"+"** e selecione **"Import from File"**
+   - Selecione o arquivo do workflow (se houver um arquivo `.json` no projeto)
+   - Ou crie um novo workflow manualmente seguindo a estrutura abaixo
+
+3. **Ativar o Workflow:**
+   - **IMPORTANTE:** Após importar/criar o workflow, ative-o usando o toggle no canto superior direito
+   - O workflow só receberá mensagens quando estiver ativo
+
+### 3. Conectar o WhatsApp (WAHA)
+
+1. **Acesse o Dashboard do WAHA:**
+   - Abra: http://localhost:3000
+   - Faça login com as credenciais configuradas (padrão: `admin` / `12345678`)
+
+2. **Conectar WhatsApp:**
+   - Escaneie o QR Code com seu WhatsApp
+   - Aguarde a conexão ser estabelecida
+
+### 4. Testar o Sistema
+
+Envie uma mensagem para o número conectado no WhatsApp. O sistema deve:
+- Criar um ticket automaticamente
+- Enviar a mensagem para o n8n
+- Processar com IA (se configurado)
+- Enviar resposta de volta (se o workflow estiver configurado)
 
 ### Parar Todos os Serviços
 
@@ -271,6 +287,7 @@ Armazena os tickets principais.
 |--------|------|-----------|
 | `id` | UUID | Identificador único do ticket |
 | `contact_number` | VARCHAR(255) | Número do contato (índice) |
+| `session_name` | VARCHAR(255) | Nome da sessão do WAHA (salvo automaticamente) |
 | `status` | ENUM | `open` ou `closed` |
 | `created_at` | TIMESTAMP | Data de criação |
 | `last_interaction_at` | TIMESTAMP | Última interação |
@@ -396,23 +413,77 @@ Resposta:
 
 #### Enviar Mensagem
 
-```http
-POST /api/messages
-Content-Type: application/json
+**Rota:** `POST /api/messages`
 
+**URL Completa:** `http://backend:3001/api/messages` (dentro do Docker) ou `http://localhost:3001/api/messages` (do host)
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+```json
 {
   "ticketId": "uuid-do-ticket",
-  "message": "Olá, como posso ajudar?"
+  "message": "Olá, como posso ajudar?",
+  "mediaUrl": "http://backend:3001/api/media/uuid-da-midia" // Opcional
 }
 ```
 
-Resposta:
+**Campos:**
+- `ticketId` (obrigatório): UUID do ticket obtido no webhook do n8n
+- `message` (obrigatório): Texto da mensagem a ser enviada
+- `mediaUrl` (opcional): URL da mídia para enviar junto com a mensagem
+
+**Resposta de Sucesso (200):**
 ```json
 {
   "success": true,
   "message": "Message sent successfully"
 }
 ```
+
+**Respostas de Erro:**
+
+- **400 Bad Request:** Campos obrigatórios faltando
+```json
+{
+  "error": "ticketId and message are required"
+}
+```
+
+- **404 Not Found:** Ticket não encontrado
+```json
+{
+  "error": "Ticket not found"
+}
+```
+
+- **500 Internal Server Error:** Erro ao enviar mensagem
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+**Exemplo de uso no n8n:**
+
+1. No seu workflow do n8n, após processar a mensagem recebida
+2. Adicione um nó **HTTP Request**
+3. Configure:
+   - **Method:** POST
+   - **URL:** `http://backend:3001/api/messages`
+   - **Authentication:** None (se estiver na mesma rede Docker)
+   - **Body Content Type:** JSON
+   - **Body:**
+     ```json
+     {
+       "ticketId": "{{ $json.ticketId }}",
+       "message": "{{ $json.resposta }}"
+     }
+     ```
+4. A mensagem será enviada automaticamente para o WhatsApp do contato associado ao ticket
 
 ### Mídias
 
@@ -506,14 +577,95 @@ Resposta de erro:
 
 ### Mensagem Enviada (n8n → Backend → WAHA → WhatsApp)
 
-1. n8n envia POST para `http://backend:3001/api/messages`
+1. n8n envia POST para `http://backend:3001/api/messages` com:
+   - `ticketId`: UUID do ticket (recebido no webhook)
+   - `message`: Texto da resposta
+   - `mediaUrl`: (opcional) URL da mídia para enviar
 2. Backend:
-   - Busca ticket
-   - Envia mensagem via WAHA API
+   - Busca ticket pelo ID
+   - Obtém o `sessionName` salvo no ticket
+   - Envia mensagem via WAHA API usando o `sessionName` correto
    - Salva mensagem no PostgreSQL como `outbound` com `is_ai_generated: true`
    - Atualiza última interação do ticket
-3. WAHA envia mensagem para WhatsApp
+3. WAHA envia mensagem para WhatsApp usando a sessão correta
 4. Usuário recebe a mensagem
+
+## 📨 Integração com n8n
+
+### Configuração do Workflow no n8n
+
+Após iniciar os serviços e fazer login no n8n, você deve importar o workflow fornecido ou criar um novo seguindo a estrutura abaixo.
+
+**⚠️ IMPORTANTE:** O workflow precisa estar **ATIVO** para receber mensagens. Use o toggle no canto superior direito para ativar.
+
+### Estrutura do Workflow
+
+O workflow deve ter a seguinte estrutura básica:
+
+```
+[Webhook] → [Processar Mensagem] → [IA/ChatGPT] → [HTTP Request] → [Resposta]
+     ↓              ↓                    ↓              ↓
+  Recebe      Extrai dados          Gera resposta   Envia para
+  mensagem    do payload            com IA          WhatsApp
+```
+
+### 1. Nó Webhook (Entrada)
+
+- **Tipo:** Webhook
+- **Método:** POST
+- **Path:** `/webhook-test/test` (ou o path configurado no `docker-compose.yml`)
+- **Produção:** Ative o workflow para gerar a URL de produção
+
+### 2. Payload Recebido do Backend
+
+O webhook receberá automaticamente os seguintes dados:
+
+```json
+{
+  "message": "Texto da mensagem ou transcrição de áudio",
+  "contactNumber": "5511999999999@lid",
+  "ticketId": "uuid-do-ticket",
+  "messageType": "text|audio|image|video|document",
+  "mediaUrl": "http://backend:3001/api/media/uuid-da-midia" // Se houver mídia
+}
+```
+
+### 3. Variáveis Disponíveis no Payload
+
+- `$json.ticketId` - UUID do ticket (use para enviar resposta)
+- `$json.contactNumber` - Número do contato (formato: `5511999999999@lid`)
+- `$json.message` - Texto da mensagem ou transcrição de áudio
+- `$json.messageType` - Tipo: `text`, `audio`, `image`, `video`, `document`
+- `$json.mediaUrl` - URL da mídia (se houver, acessível via `http://backend:3001/api/media/{id}`)
+
+### 4. Nó HTTP Request (Enviar Resposta)
+
+Após processar a mensagem com IA, adicione um nó **HTTP Request** para enviar a resposta:
+
+- **Método:** POST
+- **URL:** `http://backend:3001/api/messages`
+- **Body (JSON):**
+  ```json
+  {
+    "ticketId": "{{ $json.ticketId }}",
+    "message": "{{ $json.resposta }}"
+  }
+  ```
+
+**Nota:** O backend gerencia automaticamente o `sessionName` do WAHA, então você não precisa se preocupar com isso.
+
+### URL do Backend no n8n
+
+- **Dentro do Docker (recomendado):** `http://backend:3001`
+- **Do host (Windows/Mac/Linux):** `http://localhost:3001` ou `http://host.docker.internal:3001`
+
+### Exemplo de Workflow Completo
+
+1. **Webhook** - Recebe mensagens do backend
+2. **Set** - Extrai dados do payload (opcional)
+3. **OpenAI/ChatGPT** - Processa mensagem com IA
+4. **HTTP Request** - Envia resposta de volta para o backend
+5. **Code/Function** - Lógica adicional (opcional)
 
 ## 🧪 Testes
 

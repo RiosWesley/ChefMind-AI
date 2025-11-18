@@ -58,6 +58,7 @@ export class DatabaseService {
         CREATE TABLE IF NOT EXISTS tickets (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           contact_number VARCHAR(255) NOT NULL,
+          session_name VARCHAR(255) NOT NULL,
           status ticket_status NOT NULL DEFAULT 'open',
           created_at TIMESTAMP NOT NULL DEFAULT NOW(),
           last_interaction_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -112,6 +113,25 @@ export class DatabaseService {
       `);
 
       await client.query('COMMIT');
+      
+      // Migration: Add session_name column if it doesn't exist
+      try {
+        const checkResult = await this.pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'tickets' AND column_name = 'session_name';
+        `);
+        
+        if (checkResult.rows.length === 0) {
+          await this.pool.query(`
+            ALTER TABLE tickets 
+            ADD COLUMN session_name VARCHAR(255) NOT NULL DEFAULT 'default';
+          `);
+          console.log('Migration: session_name column added to tickets table');
+        }
+      } catch (error) {
+        console.error('Error adding session_name column:', error);
+      }
       
       // Migration: Make message_id nullable (for existing tables)
       // This needs to be outside the transaction to avoid rollback issues
