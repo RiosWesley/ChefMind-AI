@@ -19,12 +19,11 @@ export class WahaService {
 
   async sendMessage(chatId: string, message: string, sessionName: string = 'default'): Promise<void> {
     try {
-      const response = await this.client.post('/api/sendText', {
+      await this.client.post('/api/sendText', {
         session: sessionName,
         chatId,
         text: message,
       });
-      console.log('Message sent successfully:', response.data);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         console.error('Error sending message:', error.response?.data || error.message);
