@@ -5,10 +5,13 @@ dotenv.config();
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-const app = createServer();
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+createServer().then((app) => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}).catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
 
 process.on('SIGTERM', () => {

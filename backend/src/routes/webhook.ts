@@ -1,12 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { WahaWebhookEvent, WahaMessage } from '../types/waha';
 import { TicketService } from '../services/ticket-service';
+import { MessageService } from '../services/message-service';
+import { MediaService } from '../services/media-service';
 import { WahaService } from '../services/waha-service';
 import { N8nService } from '../services/n8n-service';
 import { TicketStatus } from '../types/ticket';
+import { MessageDirection } from '../types/message';
 
 export const createWebhookRouter = (
   ticketService: TicketService,
+  messageService: MessageService,
+  mediaService: MediaService,
   wahaService: WahaService,
   n8nService: N8nService
 ): Router => {
@@ -54,7 +59,7 @@ export const createWebhookRouter = (
 
       const messageTypes = ['chat', 'text', 'image', 'video', 'audio', 'document', 'voice', 'ptt', 'sticker', 'media'];
       if (messageTypes.includes(normalizedMessage.type)) {
-        await handleNewMessage(normalizedMessage, ticketService, wahaService, n8nService);
+        await handleNewMessage(normalizedMessage, ticketService, messageService, mediaService, wahaService, n8nService);
         return res.status(200).json({ received: true });
       }
 
@@ -152,6 +157,8 @@ function normalizeMediaUrl(url: string, wahaService: WahaService): string {
 async function handleNewMessage(
   message: WahaMessage,
   ticketService: TicketService,
+  messageService: MessageService,
+  mediaService: MediaService,
   wahaService: WahaService,
   n8nService: N8nService
 ): Promise<void> {
@@ -159,59 +166,7 @@ async function handleNewMessage(
 
   const messageType = normalizeMessageType(message);
   const messageText = message.body || message.caption || `[${messageType}]`;
-  let mediaUrl = message.mediaUrl || undefined;
   
-  if (message.hasMedia) {
-    if (message.media && typeof message.media === 'object' && 'url' in message.media) {
-      let extractedUrl = (message.media as { url?: string; mediaUrl?: string }).url || 
-                         (message.media as { url?: string; mediaUrl?: string }).mediaUrl || 
-                         undefined;
-      
-      if (extractedUrl) {
-        mediaUrl = normalizeMediaUrl(extractedUrl, wahaService);
-        console.log('Media URL extraída de message.media:', mediaUrl);
-      }
-    }
-    
-    if (!mediaUrl && message.mediaUrl) {
-      mediaUrl = normalizeMediaUrl(message.mediaUrl, wahaService);
-      console.log('Media URL extraída de message.mediaUrl:', mediaUrl);
-    }
-    
-    if (!mediaUrl && message._data?.Message) {
-      if (message._data.Message.audioMessage?.url) {
-        mediaUrl = normalizeMediaUrl(message._data.Message.audioMessage.url, wahaService);
-        console.log('Media URL extraída de audioMessage:', mediaUrl);
-      } else if (message._data.Message.voiceMessage?.url) {
-        mediaUrl = normalizeMediaUrl(message._data.Message.voiceMessage.url, wahaService);
-        console.log('Media URL extraída de voiceMessage:', mediaUrl);
-      } else if (message._data.Message.ptt?.url) {
-        mediaUrl = normalizeMediaUrl(message._data.Message.ptt.url, wahaService);
-        console.log('Media URL extraída de ptt:', mediaUrl);
-      }
-    }
-
-    if (!mediaUrl && message.id) {
-      console.log('Tentando obter URL de mídia via API do WAHA para messageId:', message.id);
-      const apiMediaUrl = await wahaService.getMediaUrl(message.id);
-      if (apiMediaUrl) {
-        mediaUrl = normalizeMediaUrl(apiMediaUrl, wahaService);
-        console.log('Media URL obtida via API do WAHA:', mediaUrl);
-      }
-    }
-
-    if (!mediaUrl) {
-      console.log('AVISO: Mensagem com mídia mas sem URL encontrada. Payload:', JSON.stringify({
-        hasMedia: message.hasMedia,
-        mediaUrl: message.mediaUrl,
-        media: message.media,
-        messageId: message.id,
-        _dataMessage: message._data?.Message ? Object.keys(message._data.Message) : null,
-        _dataInfo: message._data?.Info,
-      }, null, 2));
-    }
-  }
-
   let ticket;
   if (existingTicket && existingTicket.status !== TicketStatus.CLOSED) {
     ticket = existingTicket;
@@ -219,10 +174,78 @@ async function handleNewMessage(
   } else {
     ticket = await ticketService.createTicket({
       contactNumber: message.from,
-      originalMessage: messageText,
-      messageType: messageType,
-      mediaUrl,
     });
+  }
+
+  let mediaId: string | undefined;
+  let mediaUrl: string | undefined;
+  let originalMediaUrl: string | undefined;
+
+  if (message.hasMedia) {
+    if (message.media && typeof message.media === 'object' && 'url' in message.media) {
+      originalMediaUrl = (message.media as { url?: string; mediaUrl?: string }).url || 
+                         (message.media as { url?: string; mediaUrl?: string }).mediaUrl || 
+                         undefined;
+    }
+    
+    if (!originalMediaUrl && message.mediaUrl) {
+      originalMediaUrl = message.mediaUrl;
+    }
+    
+    if (!originalMediaUrl && message._data?.Message) {
+      if (message._data.Message.audioMessage?.url) {
+        originalMediaUrl = message._data.Message.audioMessage.url;
+      } else if (message._data.Message.voiceMessage?.url) {
+        originalMediaUrl = message._data.Message.voiceMessage.url;
+      } else if (message._data.Message.ptt?.url) {
+        originalMediaUrl = message._data.Message.ptt.url;
+      }
+    }
+
+    if (!originalMediaUrl && message.id) {
+      const apiMediaUrl = await wahaService.getMediaUrl(message.id);
+      if (apiMediaUrl) {
+        originalMediaUrl = apiMediaUrl;
+      }
+    }
+
+    if (originalMediaUrl) {
+      try {
+        const mimetype = message.mimetype || 'application/octet-stream';
+        const filename = originalMediaUrl.split('/').pop() || `media_${Date.now()}`;
+        
+        const media = await mediaService.downloadAndStoreMedia(
+          ticket.id,
+          '', 
+          originalMediaUrl,
+          filename,
+          mimetype
+        );
+        
+        mediaId = media.id;
+        mediaUrl = normalizeMediaUrl(originalMediaUrl, wahaService);
+      } catch (error) {
+        console.error('Error downloading and storing media:', error);
+        mediaUrl = normalizeMediaUrl(originalMediaUrl, wahaService);
+      }
+    }
+  }
+
+  const savedMessage = await messageService.createMessage({
+    ticketId: ticket.id,
+    contactNumber: message.from,
+    direction: MessageDirection.INBOUND,
+    messageType: messageType,
+    content: messageText,
+    mediaId: mediaId,
+    wahaMessageId: message.id,
+    isAiGenerated: false,
+  });
+
+  if (mediaId && savedMessage.id) {
+    await mediaService.db.query(`
+      UPDATE media SET message_id = $1 WHERE id = $2
+    `, [savedMessage.id, mediaId]);
   }
 
   console.log(`Recebida mensagem ticket ${ticket.id}`);
@@ -236,10 +259,6 @@ async function handleNewMessage(
       mediaUrl,
     });
 
-    await ticketService.updateTicket(ticket.id, {
-      status: TicketStatus.SENT_TO_N8N,
-    });
-
     console.log(`Enviando para n8n ticket ${ticket.id}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -249,8 +268,6 @@ async function handleNewMessage(
     } else {
       console.error(`Erro ao enviar ticket ${ticket.id} para n8n:`, errorMessage);
     }
-    
-    throw error;
   }
 }
 

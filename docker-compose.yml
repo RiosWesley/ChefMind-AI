@@ -19,7 +19,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U default -d default"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   waha:
     image: devlikeapro/waha:latest
@@ -48,6 +54,9 @@ services:
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://host.docker.internal:5678/webhook-test/test}
       PORT: 3001
       REDIS_URL: redis://default:default@redis:6379
+      DATABASE_URL: postgresql://default:default@postgres:5432/default
+      WHISPER_API_URL: http://whisper:9000
+      BACKEND_PUBLIC_URL: http://backend:3001
     ports:
       - "3001:3001"
     healthcheck:
@@ -60,6 +69,10 @@ services:
       redis:
         condition: service_started
       waha:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      whisper:
         condition: service_started
 
   n8n:

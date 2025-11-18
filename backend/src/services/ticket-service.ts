@@ -1,35 +1,17 @@
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
+import { DatabaseService } from './database-service';
 import { Ticket, TicketStatus, CreateTicketData } from '../types/ticket';
 
 const TICKET_TIMEOUT_MINUTES = 15;
 const TICKET_TIMEOUT_MS = TICKET_TIMEOUT_MINUTES * 60 * 1000;
 
 export class TicketService {
-  private redis: Redis | null = null;
-  private memoryStore: Map<string, Ticket> = new Map();
+  private db: DatabaseService;
   private checkInterval: NodeJS.Timeout | null = null;
 
-  constructor() {
-    this.initializeRedis();
+  constructor(db: DatabaseService) {
+    this.db = db;
     this.startAutoCloseCheck();
-  }
-
-  private async initializeRedis(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
-      try {
-        this.redis = new Redis(redisUrl);
-        this.redis.on('error', (error) => {
-          console.error('Redis connection error:', error);
-          this.redis = null;
-        });
-        console.log('Redis connected');
-      } catch (error) {
-        console.error('Failed to connect to Redis, using memory store:', error);
-        this.redis = null;
-      }
-    }
   }
 
   private startAutoCloseCheck(): void {
@@ -39,136 +21,150 @@ export class TicketService {
   }
 
   private async checkAndCloseExpiredTickets(): Promise<void> {
-    const now = new Date();
-    const tickets = await this.getAllTickets();
+    try {
+      const result = await this.db.query(`
+        SELECT id, last_interaction_at 
+        FROM tickets 
+        WHERE status = $1
+      `, [TicketStatus.OPEN]);
 
-    for (const ticket of tickets) {
-      if (ticket.status === TicketStatus.CLOSED) {
-        continue;
+      const now = new Date();
+      for (const row of result.rows) {
+        const lastInteraction = new Date(row.last_interaction_at);
+        const timeSinceLastInteraction = now.getTime() - lastInteraction.getTime();
+        
+        if (timeSinceLastInteraction >= TICKET_TIMEOUT_MS) {
+          await this.closeTicket(row.id);
+          console.log(`Ticket ${row.id} closed automatically due to inactivity`);
+        }
       }
-
-      const timeSinceLastInteraction = now.getTime() - ticket.lastInteractionAt.getTime();
-      if (timeSinceLastInteraction >= TICKET_TIMEOUT_MS) {
-        await this.closeTicket(ticket.id);
-        console.log(`Ticket ${ticket.id} closed automatically due to inactivity`);
-      }
+    } catch (error) {
+      console.error('Error checking expired tickets:', error);
     }
   }
 
   async createTicket(data: CreateTicketData): Promise<Ticket> {
-    const ticket: Ticket = {
-      id: uuidv4(),
-      contactNumber: data.contactNumber,
-      originalMessage: data.originalMessage,
-      messageType: data.messageType,
-      mediaUrl: data.mediaUrl,
-      status: TicketStatus.OPEN,
-      createdAt: new Date(),
-      lastInteractionAt: new Date(),
-    };
+    const id = uuidv4();
+    const result = await this.db.query(`
+      INSERT INTO tickets (id, contact_number, status, created_at, last_interaction_at)
+      VALUES ($1, $2, $3, NOW(), NOW())
+      RETURNING id, contact_number, status, created_at, last_interaction_at, closed_at
+    `, [id, data.contactNumber, TicketStatus.OPEN]);
 
-    await this.saveTicket(ticket);
-    return ticket;
+    return this.mapRowToTicket(result.rows[0]);
   }
 
   async getTicket(id: string): Promise<Ticket | null> {
-    if (this.redis) {
-      const data = await this.redis.get(`ticket:${id}`);
-      if (!data) return null;
-      return this.deserializeTicket(JSON.parse(data));
+    const result = await this.db.query(`
+      SELECT id, contact_number, status, created_at, last_interaction_at, closed_at
+      FROM tickets
+      WHERE id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return null;
     }
 
-    const ticket = this.memoryStore.get(id);
-    return ticket ? { ...ticket } : null;
+    return this.mapRowToTicket(result.rows[0]);
   }
 
   async updateTicket(id: string, updates: Partial<Ticket>): Promise<Ticket | null> {
-    const ticket = await this.getTicket(id);
-    if (!ticket) return null;
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
 
-    const updatedTicket: Ticket = {
-      ...ticket,
-      ...updates,
-      lastInteractionAt: new Date(),
-    };
+    if (updates.status !== undefined) {
+      setClauses.push(`status = $${paramIndex++}`);
+      values.push(updates.status);
+    }
 
-    await this.saveTicket(updatedTicket);
-    return updatedTicket;
+    if (updates.lastInteractionAt !== undefined) {
+      setClauses.push(`last_interaction_at = $${paramIndex++}`);
+      values.push(updates.lastInteractionAt);
+    }
+
+    if (updates.closedAt !== undefined) {
+      setClauses.push(`closed_at = $${paramIndex++}`);
+      values.push(updates.closedAt);
+    }
+
+    if (setClauses.length === 0) {
+      return this.getTicket(id);
+    }
+
+    setClauses.push(`last_interaction_at = NOW()`);
+    values.push(id);
+
+    const result = await this.db.query(`
+      UPDATE tickets
+      SET ${setClauses.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, contact_number, status, created_at, last_interaction_at, closed_at
+    `, values);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToTicket(result.rows[0]);
   }
 
   async closeTicket(id: string): Promise<boolean> {
-    const ticket = await this.getTicket(id);
-    if (!ticket) return false;
+    const result = await this.db.query(`
+      UPDATE tickets
+      SET status = $1, closed_at = NOW(), last_interaction_at = NOW()
+      WHERE id = $2
+      RETURNING id
+    `, [TicketStatus.CLOSED, id]);
 
-    await this.updateTicket(id, { status: TicketStatus.CLOSED });
-    return true;
+    return result.rows.length > 0;
   }
 
   async updateLastInteraction(id: string): Promise<void> {
-    const ticket = await this.getTicket(id);
-    if (ticket) {
-      await this.updateTicket(id, { lastInteractionAt: new Date() });
-    }
-  }
-
-  private async getAllTickets(): Promise<Ticket[]> {
-    if (this.redis) {
-      const keys = await this.redis.keys('ticket:*');
-      const tickets: Ticket[] = [];
-      for (const key of keys) {
-        const data = await this.redis.get(key);
-        if (data) {
-          tickets.push(this.deserializeTicket(JSON.parse(data)));
-        }
-      }
-      return tickets;
-    }
-
-    return Array.from(this.memoryStore.values());
-  }
-
-  private async saveTicket(ticket: Ticket): Promise<void> {
-    const serialized = this.serializeTicket(ticket);
-
-    if (this.redis) {
-      await this.redis.set(`ticket:${ticket.id}`, JSON.stringify(serialized));
-    } else {
-      this.memoryStore.set(ticket.id, ticket);
-    }
-  }
-
-  private serializeTicket(ticket: Ticket): Record<string, unknown> {
-    return {
-      ...ticket,
-      createdAt: ticket.createdAt.toISOString(),
-      lastInteractionAt: ticket.lastInteractionAt.toISOString(),
-    };
-  }
-
-  private deserializeTicket(data: Record<string, unknown>): Ticket {
-    return {
-      ...data,
-      createdAt: new Date(data.createdAt as string),
-      lastInteractionAt: new Date(data.lastInteractionAt as string),
-    } as Ticket;
+    await this.db.query(`
+      UPDATE tickets
+      SET last_interaction_at = NOW()
+      WHERE id = $1
+    `, [id]);
   }
 
   async getTicketByContact(contactNumber: string): Promise<Ticket | null> {
-    const tickets = await this.getAllTickets();
-    const activeTicket = tickets.find(
-      (t) => t.contactNumber === contactNumber && t.status !== TicketStatus.CLOSED
-    );
-    return activeTicket || null;
+    const result = await this.db.query(`
+      SELECT id, contact_number, status, created_at, last_interaction_at, closed_at
+      FROM tickets
+      WHERE contact_number = $1 AND status = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [contactNumber, TicketStatus.OPEN]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToTicket(result.rows[0]);
+  }
+
+  private mapRowToTicket(row: {
+    id: string;
+    contact_number: string;
+    status: string;
+    created_at: Date;
+    last_interaction_at: Date;
+    closed_at: Date | null;
+  }): Ticket {
+    return {
+      id: row.id,
+      contactNumber: row.contact_number,
+      status: row.status as TicketStatus,
+      createdAt: new Date(row.created_at),
+      lastInteractionAt: new Date(row.last_interaction_at),
+      closedAt: row.closed_at ? new Date(row.closed_at) : undefined,
+    };
   }
 
   async destroy(): Promise<void> {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
     }
-    if (this.redis) {
-      await this.redis.quit();
-    }
   }
 }
-
-
