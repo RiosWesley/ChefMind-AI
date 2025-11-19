@@ -68,3 +68,5 @@ npm run test:coverage
 - Certifique-se de usar um banco de dados de teste separado
 - Os testes não dependem de serviços externos (WAHA, Whisper, n8n) estarem rodando
 
+
+

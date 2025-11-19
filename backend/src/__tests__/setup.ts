@@ -8,3 +8,5 @@ process.env.WAHA_API_KEY = process.env.WAHA_API_KEY || 'test-key';
 process.env.WHISPER_API_URL = process.env.WHISPER_API_URL || 'http://localhost:9000';
 process.env.N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook';
 
+
+
