@@ -1,6 +1,6 @@
-# Sistema de Tickets WhatsApp com WAHA
+# Agente de IA para Restaurante - WhatsApp
 
-Sistema completo de gerenciamento de tickets para WhatsApp que integra WAHA, n8n e Whisper para transcrever áudios. Todas as mensagens e mídias são armazenadas no PostgreSQL para consulta e análise.
+Sistema completo de agente de IA para atendimento de restaurante via WhatsApp. Integra WAHA, n8n e Whisper para criar um assistente virtual inteligente capaz de gerenciar pedidos, consultar cardápio, fornecer informações do restaurante e realizar atendimento automatizado. Todas as mensagens, mídias e dados de pedidos são armazenados no PostgreSQL.
 
 ## 📋 Índice
 
@@ -21,17 +21,17 @@ Sistema completo de gerenciamento de tickets para WhatsApp que integra WAHA, n8n
 
 ## 🎯 Visão Geral
 
-Este sistema permite:
+Este sistema é um **agente de IA completo** para restaurantes que permite:
 
-- Receber mensagens do WhatsApp via WAHA
-- Criar tickets automaticamente para cada conversa
-- Armazenar todas as mensagens e mídias no PostgreSQL
-- Transcrever áudios automaticamente usando Whisper
-- Enviar dados para n8n para processamento com IA
-- Enviar respostas de volta para o WhatsApp
-- Fechar tickets automaticamente após 15 minutos de inatividade
-- Documentação interativa da API com Swagger
-- Documentação otimizada para LLMs em `/llm.txt`
+- **Atendimento Automatizado**: Receber e responder mensagens do WhatsApp via WAHA
+- **Gerenciamento de Pedidos**: Criar, consultar, atualizar e cancelar pedidos
+- **Consulta de Cardápio**: Buscar itens, categorias e detalhes do menu
+- **Informações do Restaurante**: Horários, área de entrega, promoções
+- **Processamento com IA**: Integração com n8n para processamento inteligente de mensagens
+- **Tools para IA**: 12 ferramentas disponíveis para o agente executar ações
+- **Transcrição de Áudios**: Conversão automática de áudios em texto via Whisper
+- **Armazenamento Completo**: Todas as mensagens, mídias e pedidos no PostgreSQL
+- **Documentação Interativa**: Swagger UI e documentação otimizada para LLMs
 
 ## 🏗️ Arquitetura
 
@@ -54,37 +54,85 @@ Este sistema permite:
 ### Componentes
 
 - **WAHA**: API HTTP para WhatsApp (recebe e envia mensagens)
-- **Backend**: Serviço Node.js/TypeScript que gerencia tickets e integra todos os componentes
-- **PostgreSQL**: Banco de dados para armazenar tickets, mensagens e mídias
-- **n8n**: Plataforma de automação para processar mensagens com IA
+- **Backend**: Serviço Node.js/TypeScript que gerencia tickets, pedidos, cardápio e integra todos os componentes
+- **PostgreSQL**: Banco de dados para armazenar tickets, mensagens, mídias, pedidos, cardápio e informações do restaurante
+- **n8n**: Plataforma de automação para processar mensagens com IA e executar tools
 - **Whisper**: Serviço de transcrição de áudios (OpenAI Whisper)
 - **Redis**: (Opcional) Pode ser usado para cache
 
 ## ✨ Funcionalidades
 
-### Gerenciamento de Tickets
+### 🤖 Agente de IA com Tools
+O sistema fornece **12 tools** que o agente de IA pode executar para realizar ações:
+
+**Gerenciamento de Pedidos:**
+- `create_order`: Criar novo pedido com itens do cardápio
+- `get_order`: Consultar status e detalhes de um pedido
+- `update_order`: Adicionar, remover ou modificar itens de um pedido
+- `cancel_order`: Cancelar um pedido
+- `list_orders`: Listar pedidos do cliente
+
+**Consulta de Cardápio:**
+- `get_menu`: Buscar cardápio completo ou por categoria
+- `search_menu_item`: Buscar itens específicos no cardápio
+- `get_menu_item_details`: Obter detalhes completos de um item (preço, ingredientes, alergênicos)
+
+**Informações do Restaurante:**
+- `get_restaurant_hours`: Consultar horários de funcionamento
+- `get_delivery_info`: Informações sobre entrega (área, taxa, tempo estimado)
+- `get_promotions`: Listar promoções ativas
+
+**Gerenciamento de Tickets:**
+- `close_ticket`: Fechar ticket de atendimento
+
+### 📦 Gerenciamento de Pedidos
+- Criação de pedidos com validação de itens disponíveis
+- Cálculo automático de totais (subtotal + taxa de entrega)
+- Validação de horário de funcionamento
+- Validação de área de entrega
+- Suporte a delivery e retirada (pickup)
+- Rastreamento de status: pending, confirmed, preparing, ready, delivered, cancelled
+- Histórico completo de pedidos por cliente
+
+### 🍽️ Gerenciamento de Cardápio
+- Categorias de itens organizadas
+- Informações detalhadas: preço, descrição, ingredientes, alergênicos
+- Controle de disponibilidade de itens
+- Busca por nome ou descrição
+- Filtro por categoria
+
+### 🏪 Informações do Restaurante
+- Horários de funcionamento por dia da semana
+- Verificação automática se está aberto
+- Área de entrega configurável
+- Taxa de entrega e valor mínimo
+- Tempo estimado de entrega
+- Promoções ativas com validade
+
+### 🎫 Gerenciamento de Tickets
 - Criação automática de tickets para cada contato
 - Armazenamento automático do session name do WAHA
 - Fechamento automático após 15 minutos de inatividade
-- Fechamento manual via API
+- Fechamento manual via API ou tool
 - Busca de tickets por ID ou número de contato
 
-### Armazenamento de Mensagens
+### 💬 Armazenamento de Mensagens
 - Todas as mensagens (entrada e saída) são salvas no banco
 - Suporte a texto, imagens, vídeos, áudios e documentos
 - Histórico completo de conversas por ticket
 - Identificação de mensagens enviadas por IA (`is_ai_generated`)
 
-### Armazenamento de Mídias
+### 📎 Armazenamento de Mídias
 - Download automático de mídias do WAHA
 - Armazenamento em BYTEA no PostgreSQL
 - URLs normalizadas para acesso via proxy do backend
 - Transcrição automática de áudios via Whisper
 
-### Integração com n8n
+### 🔗 Integração com n8n
 - Envio automático de novas mensagens para webhook do n8n
 - Recebimento de respostas do n8n para enviar ao WhatsApp
 - Payload completo com ticketId, mensagem, tipo e URL de mídia
+- Execução de tools via API para ações do agente
 - Session name gerenciado automaticamente pelo backend
 
 ## 📦 Pré-requisitos
@@ -326,6 +374,34 @@ O LM Studio pode ser usado no n8n para processar mensagens com modelos de lingua
 - **Instruções do Sistema:** Defina claramente o papel do assistente no `system` message
 - **Token Limit:** Ajuste `max_tokens` conforme necessário (mais tokens = respostas mais longas)
 - **Performance:** Modelos menores (7B-8B) são mais rápidos e suficientes para a maioria dos casos
+- **Tools/Functions:** Use function calling para permitir que a IA execute as tools automaticamente
+
+### Usando Tools no n8n
+
+O sistema fornece 12 tools que podem ser executadas pelo agente de IA. Para usar:
+
+1. **Obter lista de tools:**
+   - Adicione um nó HTTP Request antes do processamento com IA
+   - Method: GET
+   - URL: `http://backend:3001/api/tools`
+   - Salve o resultado em uma variável
+
+2. **Incluir tools no prompt da IA:**
+   - Use a lista de tools obtida no passo anterior
+   - Inclua no body da requisição para LM Studio/OpenAI
+   - Configure o modelo para usar function calling
+
+3. **Executar tool quando solicitada pela IA:**
+   - Adicione um nó IF para verificar se a IA quer executar uma tool
+   - Se sim, adicione um nó HTTP Request:
+     - Method: POST
+     - URL: `http://backend:3001/api/tools/execute`
+     - Body: `{{ $json.tool_call }}` (ajuste conforme formato da resposta da IA)
+
+4. **Exemplo de workflow com tools:**
+   ```
+   [Webhook] → [Get Tools] → [LM Studio] → [IF Tool?] → [Execute Tool] → [Send Message]
+   ```
 
 ## 🎬 Como Iniciar
 
@@ -367,12 +443,45 @@ docker compose ps
    - Escaneie o QR Code com seu WhatsApp
    - Aguarde a conexão ser estabelecida
 
-### 4. Testar o Sistema
+### 4. Configurar Dados Iniciais
+
+Antes de usar o sistema, você precisa popular algumas informações básicas:
+
+**1. Informações do Restaurante:**
+```sql
+UPDATE restaurant_info SET 
+  name = 'Nome do Restaurante',
+  phone = '11999999999',
+  address = 'Endereço completo',
+  opening_hours = '{"monday": {"open": "09:00", "close": "22:00"}, ...}'::jsonb,
+  delivery_area = ARRAY['Bairro 1', 'Bairro 2'],
+  delivery_fee = 5.00,
+  min_order_value = 20.00,
+  estimated_delivery_time_minutes = 30;
+```
+
+**2. Categorias do Cardápio:**
+```sql
+INSERT INTO menu_categories (name, description, display_order) VALUES
+  ('Pizzas', 'Nossas deliciosas pizzas', 1),
+  ('Bebidas', 'Refrigerantes e sucos', 2),
+  ('Sobremesas', 'Doces e sobremesas', 3);
+```
+
+**3. Itens do Cardápio:**
+```sql
+INSERT INTO menu_items (category_id, name, description, price, is_available) VALUES
+  ('uuid-categoria', 'Pizza Margherita', 'Molho, mussarela e manjericão', 35.90, true),
+  ('uuid-categoria', 'Coca-Cola', 'Lata 350ml', 5.50, true);
+```
+
+### 5. Testar o Sistema
 
 Envie uma mensagem para o número conectado no WhatsApp. O sistema deve:
 - Criar um ticket automaticamente
 - Enviar a mensagem para o n8n
 - Processar com IA (se configurado)
+- O agente pode executar tools para criar pedidos, consultar cardápio, etc.
 - Enviar resposta de volta (se o workflow estiver configurado)
 
 ### Parar Todos os Serviços
@@ -460,6 +569,107 @@ Armazena arquivos de mídia.
 | `file_data` | BYTEA | Dados binários do arquivo |
 | `original_url` | TEXT | URL original do WAHA (nullable) |
 | `transcription` | TEXT | Transcrição de áudio (nullable) |
+| `created_at` | TIMESTAMP | Data de criação |
+
+### Tabela: `menu_categories`
+
+Armazena categorias do cardápio.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único da categoria |
+| `name` | VARCHAR(255) | Nome da categoria |
+| `description` | TEXT | Descrição da categoria (nullable) |
+| `display_order` | INTEGER | Ordem de exibição |
+| `is_active` | BOOLEAN | Se a categoria está ativa |
+| `created_at` | TIMESTAMP | Data de criação |
+
+### Tabela: `menu_items`
+
+Armazena itens do cardápio.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único do item |
+| `category_id` | UUID | FK para menu_categories |
+| `name` | VARCHAR(255) | Nome do item |
+| `description` | TEXT | Descrição do item (nullable) |
+| `price` | DECIMAL(10,2) | Preço do item |
+| `image_url` | TEXT | URL da imagem (nullable) |
+| `ingredients` | TEXT[] | Lista de ingredientes (nullable) |
+| `allergens` | TEXT[] | Lista de alergênicos (nullable) |
+| `is_available` | BOOLEAN | Se o item está disponível |
+| `display_order` | INTEGER | Ordem de exibição |
+| `created_at` | TIMESTAMP | Data de criação |
+
+### Tabela: `orders`
+
+Armazena pedidos dos clientes.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único do pedido |
+| `ticket_id` | UUID | FK para tickets |
+| `contact_number` | VARCHAR(255) | Número do contato |
+| `status` | ENUM | `pending`, `confirmed`, `preparing`, `ready`, `delivered`, `cancelled` |
+| `delivery_type` | ENUM | `delivery` ou `pickup` |
+| `delivery_address` | TEXT | Endereço de entrega (nullable) |
+| `subtotal` | DECIMAL(10,2) | Subtotal dos itens |
+| `delivery_fee` | DECIMAL(10,2) | Taxa de entrega |
+| `total` | DECIMAL(10,2) | Total do pedido |
+| `estimated_time_minutes` | INTEGER | Tempo estimado em minutos (nullable) |
+| `cancelled_at` | TIMESTAMP | Data de cancelamento (nullable) |
+| `cancellation_reason` | TEXT | Motivo do cancelamento (nullable) |
+| `created_at` | TIMESTAMP | Data de criação |
+| `updated_at` | TIMESTAMP | Data de atualização |
+
+### Tabela: `order_items`
+
+Armazena itens de cada pedido.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único do item do pedido |
+| `order_id` | UUID | FK para orders |
+| `menu_item_id` | UUID | FK para menu_items |
+| `quantity` | INTEGER | Quantidade |
+| `unit_price` | DECIMAL(10,2) | Preço unitário no momento do pedido |
+| `subtotal` | DECIMAL(10,2) | Subtotal do item |
+| `notes` | TEXT | Observações do cliente (nullable) |
+| `created_at` | TIMESTAMP | Data de criação |
+
+### Tabela: `restaurant_info`
+
+Armazena informações do restaurante (singleton).
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único |
+| `name` | VARCHAR(255) | Nome do restaurante |
+| `phone` | VARCHAR(255) | Telefone (nullable) |
+| `address` | TEXT | Endereço (nullable) |
+| `opening_hours` | JSONB | Horários de funcionamento por dia |
+| `delivery_area` | TEXT[] | Lista de áreas de entrega (nullable) |
+| `delivery_fee` | DECIMAL(10,2) | Taxa de entrega padrão (nullable) |
+| `min_order_value` | DECIMAL(10,2) | Valor mínimo do pedido (nullable) |
+| `estimated_delivery_time_minutes` | INTEGER | Tempo estimado de entrega (nullable) |
+| `updated_at` | TIMESTAMP | Data de atualização |
+
+### Tabela: `promotions`
+
+Armazena promoções ativas.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | Identificador único da promoção |
+| `title` | VARCHAR(255) | Título da promoção |
+| `description` | TEXT | Descrição (nullable) |
+| `discount_type` | ENUM | `percentage` ou `fixed` |
+| `discount_value` | DECIMAL(10,2) | Valor do desconto |
+| `min_order_value` | DECIMAL(10,2) | Valor mínimo do pedido (nullable) |
+| `valid_from` | TIMESTAMP | Data de início |
+| `valid_until` | TIMESTAMP | Data de término |
+| `is_active` | BOOLEAN | Se a promoção está ativa |
 | `created_at` | TIMESTAMP | Data de criação |
 
 ## 🔌 API Endpoints
@@ -632,30 +842,42 @@ Retorna o arquivo binário da mídia com os headers `Content-Type` e `Content-Le
 
 ### Tools (Ferramentas para IA)
 
+O sistema fornece 12 tools que o agente de IA pode executar. As tools são acessadas via API e podem ser chamadas pelo n8n ou qualquer sistema de IA.
+
 #### Listar Tools Disponíveis
 
 ```http
 GET /api/tools
 ```
 
-Resposta:
+Resposta (exemplo com algumas tools):
 ```json
 {
   "tools": [
     {
-      "name": "close_ticket",
-      "description": "Fecha um ticket específico. Use quando o atendimento for concluído ou quando o usuário não responder mais.",
+      "name": "create_order",
+      "description": "Cria um novo pedido com itens do cardápio...",
       "parameters": {
         "type": "object",
         "properties": {
-          "ticketId": {
-            "type": "string",
-            "description": "O ID do ticket que deve ser fechado"
-          }
+          "ticketId": { "type": "string" },
+          "items": { "type": "array" },
+          "deliveryType": { "type": "string", "enum": ["delivery", "pickup"] }
         },
-        "required": ["ticketId"]
+        "required": ["ticketId", "items", "deliveryType"]
+      }
+    },
+    {
+      "name": "get_menu",
+      "description": "Busca o cardápio completo ou filtrado por categoria...",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "categoryId": { "type": "string" }
+        }
       }
     }
+    // ... mais 10 tools
   ]
 }
 ```
@@ -667,9 +889,18 @@ POST /api/tools/execute
 Content-Type: application/json
 
 {
-  "tool": "close_ticket",
+  "tool": "create_order",
   "parameters": {
-    "ticketId": "uuid-do-ticket"
+    "ticketId": "uuid-do-ticket",
+    "items": [
+      {
+        "menuItemId": "uuid-do-item",
+        "quantity": 2,
+        "notes": "Sem cebola"
+      }
+    ],
+    "deliveryType": "delivery",
+    "deliveryAddress": "Rua Exemplo, 123"
   }
 }
 ```
@@ -679,8 +910,11 @@ Resposta de sucesso:
 {
   "success": true,
   "result": {
-    "message": "Ticket uuid-do-ticket closed successfully",
-    "ticketId": "uuid-do-ticket"
+    "orderId": "uuid-do-pedido",
+    "status": "pending",
+    "total": 45.90,
+    "estimatedTimeMinutes": 30,
+    "message": "Order created successfully"
   }
 }
 ```
@@ -689,7 +923,63 @@ Resposta de erro:
 ```json
 {
   "success": false,
-  "error": "Ticket with id 'uuid-do-ticket' not found"
+  "error": "Menu item not found or not available"
+}
+```
+
+#### Exemplos de Uso das Tools
+
+**Criar Pedido:**
+```json
+{
+  "tool": "create_order",
+  "parameters": {
+    "ticketId": "uuid",
+    "items": [{"menuItemId": "uuid", "quantity": 1}],
+    "deliveryType": "delivery",
+    "deliveryAddress": "Endereço completo"
+  }
+}
+```
+
+**Consultar Cardápio:**
+```json
+{
+  "tool": "get_menu",
+  "parameters": {
+    "categoryId": "uuid-categoria" // opcional
+  }
+}
+```
+
+**Buscar Item no Cardápio:**
+```json
+{
+  "tool": "search_menu_item",
+  "parameters": {
+    "query": "pizza",
+    "categoryId": "uuid" // opcional
+  }
+}
+```
+
+**Consultar Horários:**
+```json
+{
+  "tool": "get_restaurant_hours",
+  "parameters": {}
+}
+```
+
+**Listar Pedidos:**
+```json
+{
+  "tool": "list_orders",
+  "parameters": {
+    "ticketId": "uuid",
+    "status": "pending", // opcional
+    "limit": 10 // opcional
+  }
 }
 ```
 
@@ -870,13 +1160,39 @@ Após processar a mensagem com IA, adicione um nó **HTTP Request** para enviar 
 - **Dentro do Docker (recomendado):** `http://backend:3001`
 - **Do host (Windows/Mac/Linux):** `http://localhost:3001` ou `http://host.docker.internal:3001`
 
-### Exemplo de Workflow Completo
+### Exemplo de Workflow Completo com Tools
 
 1. **Webhook** - Recebe mensagens do backend
 2. **Set** - Extrai dados do payload (opcional)
-3. **OpenAI/ChatGPT** - Processa mensagem com IA
-4. **HTTP Request** - Envia resposta de volta para o backend
-5. **Code/Function** - Lógica adicional (opcional)
+3. **HTTP Request (LM Studio/OpenAI)** - Processa mensagem com IA
+   - Inclua as tools disponíveis no prompt usando `GET /api/tools`
+   - Configure o modelo para usar function calling/tools
+4. **IF** - Verifica se a IA quer executar uma tool
+5. **HTTP Request** - Executa tool via `POST /api/tools/execute` (se necessário)
+6. **HTTP Request** - Envia resposta de volta para o backend via `POST /api/messages`
+7. **Code/Function** - Lógica adicional (opcional)
+
+### Exemplo de Prompt para IA com Tools
+
+```json
+{
+  "model": "llama-3.1-8b-instruct",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Você é um assistente de restaurante. Você pode:\n- Consultar o cardápio\n- Criar pedidos\n- Consultar horários\n- Informar sobre promoções\n\nUse as tools disponíveis quando necessário. Sempre seja prestativo e amigável."
+    },
+    {
+      "role": "user",
+      "content": "{{ $json.message }}"
+    }
+  ],
+  "tools": [
+    // Inclua as tools retornadas por GET /api/tools
+  ],
+  "temperature": 0.7
+}
+```
 
 ## 🧪 Testes
 
@@ -1025,5 +1341,5 @@ Este projeto está sob a licença ISC.
 
 ---
 
-**Última atualização**: Janeiro 2024
+**Última atualização**: Janeiro 2025
 
