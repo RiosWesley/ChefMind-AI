@@ -300,73 +300,7 @@ O LM Studio pode ser usado no n8n para processar mensagens com modelos de lingua
 
 ### Configuração no n8n
 
-1. **No seu workflow do n8n, adicione um nó HTTP Request:**
-   - **Method:** POST
-   - **URL:** `http://host.docker.internal:1234/v1/chat/completions`
-   - **Headers:**
-     ```
-     Content-Type: application/json
-     ```
-   - **Body (JSON):**
-     ```json
-     {
-       "model": "llama-3.1-8b-instruct",
-       "messages": [
-         {
-           "role": "system",
-           "content": "Você é um assistente útil e prestativo. Responda sempre em português brasileiro."
-         },
-         {
-           "role": "user",
-           "content": "{{ $json.message }}"
-         }
-       ],
-       "temperature": 0.7,
-       "max_tokens": 500
-     }
-     ```
-
-2. **Processar a resposta:**
-   - A resposta virá em `{{ $json.choices[0].message.content }}`
-   - Use esse conteúdo para enviar de volta via `/api/messages`
-
-### Exemplo de Workflow Completo com LM Studio
-
-```
-[Webhook] → [Set] → [HTTP Request (LM Studio)] → [Set] → [HTTP Request (Backend)]
-     ↓         ↓              ↓                      ↓              ↓
-  Recebe   Extrai      Envia para            Extrai resposta   Envia para
-  mensagem dados       LM Studio             da IA             WhatsApp
-```
-
-### Configurações Recomendadas
-
-**Para respostas rápidas:**
-```json
-{
-  "temperature": 0.7,
-  "max_tokens": 300,
-  "top_p": 0.9
-}
-```
-
-**Para respostas mais criativas:**
-```json
-{
-  "temperature": 0.9,
-  "max_tokens": 500,
-  "top_p": 0.95
-}
-```
-
-**Para respostas mais precisas:**
-```json
-{
-  "temperature": 0.3,
-  "max_tokens": 400,
-  "top_p": 0.8
-}
-```
+1. **No seu workflow do n8n, acesse a configuração dos modelos, crie a credencial da OpenAI com a url do LM Studio.**
 
 ### Dicas de Uso
 
