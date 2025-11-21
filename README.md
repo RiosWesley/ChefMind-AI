@@ -167,7 +167,7 @@ Se quiser usar GPU para transcrição de áudios:
 
 ```bash
 git clone <url-do-repositorio>
-cd ChatbotIgreja
+cd chefmind-ia
 ```
 
 ### 2. Configurar Variáveis de Ambiente
@@ -1289,7 +1289,7 @@ N8N_WEBHOOK_URL=http://localhost:5678/webhook
 
 **Solução**:
 1. Pare os containers: `docker compose down`
-2. Remova o volume antigo: `docker volume rm chatbotigreja_pgdata`
+2. Remova o volume antigo: `docker volume rm chefmind-ia_pgdata`
 3. Reinicie: `docker compose up -d`
 
 ## 📝 Notas Importantes
@@ -1313,7 +1313,7 @@ N8N_WEBHOOK_URL=http://localhost:5678/webhook
 - Faça backup regular do volume `pgdata`
 - Exporte dados periodicamente:
   ```bash
-  docker exec chatbotigreja-postgres-1 pg_dumpall -U default > backup.sql
+  docker exec chefmind-ia-postgres-1 pg_dumpall -U default > backup.sql
   ```
 
 ## 📚 Recursos Adicionais

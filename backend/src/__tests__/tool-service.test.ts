@@ -1,10 +1,16 @@
 import { DatabaseService } from '../services/database-service';
 import { TicketService } from '../services/ticket-service';
+import { OrderService } from '../services/order-service';
+import { MenuService } from '../services/menu-service';
+import { RestaurantService } from '../services/restaurant-service';
 import { ToolService } from '../services/tool-service';
 
 describe('ToolService', () => {
   let db: DatabaseService;
   let ticketService: TicketService;
+  let orderService: OrderService;
+  let menuService: MenuService;
+  let restaurantService: RestaurantService;
   let toolService: ToolService;
   let ticketId: string;
 
@@ -12,10 +18,15 @@ describe('ToolService', () => {
     db = new DatabaseService();
     await db.initialize();
     ticketService = new TicketService(db);
-    toolService = new ToolService(ticketService);
+    menuService = new MenuService(db);
+    restaurantService = new RestaurantService(db);
+    orderService = new OrderService(db, menuService, restaurantService);
+    toolService = new ToolService(ticketService, orderService, menuService, restaurantService);
   });
 
   afterAll(async () => {
+    await db.query('DELETE FROM order_items');
+    await db.query('DELETE FROM orders');
     await db.query('DELETE FROM messages');
     await db.query('DELETE FROM media');
     await db.query('DELETE FROM tickets');
@@ -23,12 +34,15 @@ describe('ToolService', () => {
   });
 
   beforeEach(async () => {
+    await db.query('DELETE FROM order_items');
+    await db.query('DELETE FROM orders');
     await db.query('DELETE FROM messages');
     await db.query('DELETE FROM media');
     await db.query('DELETE FROM tickets');
     
     const ticket = await ticketService.createTicket({
       contactNumber: '5511999999999@c.us',
+      sessionName: 'test-session',
     });
     ticketId = ticket.id;
   });
@@ -38,7 +52,21 @@ describe('ToolService', () => {
     
     expect(tools).toBeDefined();
     expect(Array.isArray(tools)).toBe(true);
-    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.length).toBe(12);
+    
+    const toolNames = tools.map(t => t.name);
+    expect(toolNames).toContain('close_ticket');
+    expect(toolNames).toContain('create_order');
+    expect(toolNames).toContain('get_order');
+    expect(toolNames).toContain('update_order');
+    expect(toolNames).toContain('cancel_order');
+    expect(toolNames).toContain('list_orders');
+    expect(toolNames).toContain('get_menu');
+    expect(toolNames).toContain('search_menu_item');
+    expect(toolNames).toContain('get_menu_item_details');
+    expect(toolNames).toContain('get_restaurant_hours');
+    expect(toolNames).toContain('get_delivery_info');
+    expect(toolNames).toContain('get_promotions');
     
     const closeTicketTool = tools.find(t => t.name === 'close_ticket');
     expect(closeTicketTool).toBeDefined();

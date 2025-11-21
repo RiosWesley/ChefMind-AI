@@ -12,6 +12,9 @@ import { createTicketsRouter } from './routes/tickets';
 import { createMessagesRouter } from './routes/messages';
 import { createToolsRouter } from './routes/tools';
 import { ToolService } from './services/tool-service';
+import { OrderService } from './services/order-service';
+import { MenuService } from './services/menu-service';
+import { RestaurantService } from './services/restaurant-service';
 import { setupSwagger } from './config/swagger';
 import { LlmDocService } from './services/llm-doc-service';
 
@@ -29,12 +32,15 @@ export const createServer = async (): Promise<Express> => {
   const mediaService = new MediaService(db, whisperService);
   const wahaService = new WahaService();
   const n8nService = new N8nService();
+  const menuService = new MenuService(db);
+  const restaurantService = new RestaurantService(db);
+  const orderService = new OrderService(db, menuService, restaurantService);
 
   app.use('/webhook', createWebhookRouter(ticketService, messageService, mediaService, wahaService, n8nService));
   app.use('/api/tickets', createTicketsRouter(ticketService, messageService, mediaService));
   app.use('/api/messages', createMessagesRouter(ticketService, messageService, wahaService));
   
-  const toolService = new ToolService(ticketService);
+  const toolService = new ToolService(ticketService, orderService, menuService, restaurantService);
   app.use('/api/tools', createToolsRouter(toolService));
 
   /**
