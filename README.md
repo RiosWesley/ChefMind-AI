@@ -289,26 +289,59 @@ O LM Studio pode ser usado no n8n para processar mensagens com modelos de lingua
 2. **Configure o servidor local:**
    - No LM Studio, vá para a aba "Local Server"
    - Clique em "Start Server"
-   - Anote a URL (geralmente `http://localhost:1234`)
+   - Anote a URL (geralmente `http://localhost:1234` ou o IP da sua máquina, ex: `http://100.76.6.119:1234`)
 
 ### Modelos Recomendados para Português
 
-**Para uso geral (recomendado):**
-- **Qwen3-VL-4B** - Excelente para português, rápido e eficiente e multimodal.
+**Para roteamento de intenções (recomendado):**
+- **gemma-3-270m-model-router** - Modelo leve de 270M otimizado para classificação de intenções e roteamento. Ideal para decidir entre diferentes fluxos de atendimento.
+
+**Para uso geral e processamento:**
+- **gemma-3-270m-it** - Versão instruction-tuned do modelo de 270M, otimizada para seguir instruções e gerar respostas.
+- **qwen/qwen3-vl-4b** - Excelente para português, rápido e eficiente, com suporte multimodal (texto e imagem).
 - **LFM2-8B-A1B** - Excelente para tarefas que necessitem de maior proeficiência de Tools, mas sem abrir mão de ser leve.
 
+### Configuração de Parâmetros de Inferência
+
+Para garantir a melhor consistência no formato JSON e precisão na classificação, especialmente para modelos menores como o **gemma-3-270m-model-router**, use os seguintes parâmetros:
+
+| Parâmetro | Valor | Motivo |
+|-----------|-------|--------|
+| **Temperature** | `0.6` | Equilíbrio ideal para este modelo de 270M não "alucinar" o JSON, mas entender variações linguísticas. |
+| **Top P** | `0.95` | Nucleus sampling padrão para evitar respostas de baixa probabilidade. |
+| **Top K** | `64` | Limita o vocabulário de escolha, ajudando a manter o foco nas tags JSON. |
+
+**Configuração no LM Studio:**
+1. No LM Studio, após carregar o modelo, vá em "Inference Parameters"
+2. Configure:
+   - Temperature: `0.6`
+   - Top P: `0.95`
+   - Top K: `64`
+3. Salve as configurações para uso no n8n
 
 ### Configuração no n8n
 
-1. **No seu workflow do n8n, acesse a configuração dos modelos, crie a credencial da OpenAI com a url do LM Studio.**
+1. **Criar credencial OpenAI:**
+   - No n8n, vá em **Credentials** → **Add Credential**
+   - Selecione **OpenAI API**
+   - Configure:
+     - **API Key:** Qualquer valor (não é usado pelo LM Studio)
+     - **Base URL:** URL do seu servidor LM Studio (ex: `http://localhost:1234/v1` ou `http://100.76.6.119:1234/v1`)
+   - Salve a credencial
+
+2. **Usar nos nós LangChain:**
+   - Nos nós do tipo **OpenAI Chat Model**, selecione a credencial criada
+   - Selecione o modelo desejado (ex: `gemma-3-270m-model-router`, `gemma-3-270m-it`)
+   - Os parâmetros configurados no LM Studio serão aplicados automaticamente
 
 ### Dicas de Uso
 
 - **Contexto do Ticket:** Inclua o histórico de mensagens no prompt para melhor contexto
 - **Instruções do Sistema:** Defina claramente o papel do assistente no `system` message
 - **Token Limit:** Ajuste `max_tokens` conforme necessário (mais tokens = respostas mais longas)
-- **Performance:** Modelos menores (7B-8B) são mais rápidos e suficientes para a maioria dos casos
+- **Performance:** Modelos menores (270M-4B) são mais rápidos e suficientes para a maioria dos casos
 - **Tools/Functions:** Use function calling para permitir que a IA execute as tools automaticamente
+- **Roteamento de Intenções:** Use modelos especializados como `gemma-3-270m-model-router` para classificar intenções antes de processar com modelos maiores
 
 ### Usando Tools no n8n
 
@@ -1029,26 +1062,31 @@ http://localhost:3001/llm.txt
 
 ### Configuração do Workflow no n8n
 
-Após iniciar os serviços e fazer login no n8n, você deve importar o workflow fornecido ou criar um novo seguindo a estrutura abaixo.
+Após iniciar os serviços e fazer login no n8n, você deve importar o workflow fornecido (arquivo `.json`) ou criar um novo seguindo a estrutura abaixo.
 
 **⚠️ IMPORTANTE:** O workflow precisa estar **ATIVO** para receber mensagens. Use o toggle no canto superior direito para ativar.
 
-### Estrutura do Workflow
+### Estrutura do Workflow Recomendada
 
-O workflow deve ter a seguinte estrutura básica:
+O workflow recomendado tem a seguinte estrutura:
 
 ```
-[Webhook] → [Processar Mensagem] → [IA/ChatGPT] → [HTTP Request] → [Resposta]
-     ↓              ↓                    ↓              ↓
-  Recebe      Extrai dados          Gera resposta   Envia para
-  mensagem    do payload            com IA          WhatsApp
+[Webhook] → [Set Dados] → [Switch por Tipo] → [Processar Mídia] → [Buffer Redis]
+     ↓            ↓              ↓                    ↓                ↓
+  Recebe    Extrai dados    Texto/Audio/      Transcrição/      Aguarda novas
+  mensagem  do payload      Imagem            Processamento     mensagens
+                                                                    ↓
+[Buscar Histórico] → [Resumir Conversa] → [Roteamento] → [Agentes] → [Resposta]
+     ↓                    ↓                    ↓            ↓           ↓
+  PostgreSQL          Summarization      Classifica    INFO/RAG    Envia para
+  Chat History        Chain             Intenções     Agents      WhatsApp
 ```
 
 ### 1. Nó Webhook (Entrada)
 
 - **Tipo:** Webhook
 - **Método:** POST
-- **Path:** `/webhook-test/test` (ou o path configurado no `docker-compose.yml`)
+- **Path:** `/test` (ou o path configurado no `docker-compose.yml`)
 - **Produção:** Ative o workflow para gerar a URL de produção
 
 ### 2. Payload Recebido do Backend
@@ -1061,72 +1099,176 @@ O webhook receberá automaticamente os seguintes dados:
   "contactNumber": "5511999999999@lid",
   "ticketId": "uuid-do-ticket",
   "messageType": "text|audio|image|video|document",
-  "mediaUrl": "http://backend:3001/api/media/uuid-da-midia" // Se houver mídia
+  "mediaUrl": "http://backend:3001/api/media/uuid-da-midia",
+  "audio": {
+    "base64": "base64-encoded-audio" // Se for áudio
+  },
+  "systemPrompt": "Prompt do sistema (opcional)"
 }
 ```
 
 ### 3. Variáveis Disponíveis no Payload
 
-- `$json.ticketId` - UUID do ticket (use para enviar resposta)
-- `$json.contactNumber` - Número do contato (formato: `5511999999999@lid`)
-- `$json.message` - Texto da mensagem ou transcrição de áudio
-- `$json.messageType` - Tipo: `text`, `audio`, `image`, `video`, `document`
-- `$json.mediaUrl` - URL da mídia (se houver, acessível via `http://backend:3001/api/media/{id}`)
+- `$json.body.ticketId` - UUID do ticket (use para enviar resposta)
+- `$json.body.contactNumber` - Número do contato (formato: `5511999999999@lid`)
+- `$json.body.message` - Texto da mensagem ou transcrição de áudio
+- `$json.body.messageType` - Tipo: `text`, `audio`, `image`, `video`, `document`
+- `$json.body.mediaUrl` - URL da mídia (se houver, acessível via `http://backend:3001/api/media/{id}`)
+- `$json.body.audio.base64` - Áudio codificado em base64 (se for áudio)
 
-### 4. Nó HTTP Request (Enviar Resposta)
+### 4. Processamento por Tipo de Mídia
 
-Após processar a mensagem com IA, adicione um nó **HTTP Request** para enviar a resposta:
+#### Texto
+- Mensagens de texto são processadas diretamente
+- Vão para o buffer Redis para aguardar possíveis mensagens adicionais
 
+#### Áudio
+1. **Download do áudio** via `mediaUrl`
+2. **Transcrição** usando Whisper (`http://whisper:9000/asr`)
+3. **Formatação** da transcrição com prefixo "Transcrição:"
+4. **Buffer Redis** para aguardar possíveis mensagens adicionais
+
+#### Imagem
+1. **Download da imagem** via `mediaUrl`
+2. **Conversão para Base64**
+3. **Processamento multimodal** usando modelo com suporte a visão (ex: `qwen/qwen3-vl-4b`)
+4. **Extração de texto** da descrição da imagem
+5. **Buffer Redis** para aguardar possíveis mensagens adicionais
+
+### 5. Sistema de Buffer com Redis
+
+O workflow utiliza Redis para criar um buffer de mensagens, permitindo:
+- **Aguardar múltiplas mensagens** em sequência antes de processar
+- **Evitar processamento prematuro** quando o usuário está digitando
+- **Agrupar mensagens relacionadas** para melhor contexto
+
+**Fluxo:**
+1. Mensagem chega → Adiciona ao Redis (lista)
+2. Aguarda 0 segundos (configurável via Wait node)
+3. Verifica se chegou nova mensagem
+4. Se sim, repete o processo
+5. Se não, processa todas as mensagens acumuladas
+
+### 6. Sistema de Roteamento de Intenções
+
+O workflow utiliza um modelo especializado (`gemma-3-270m-model-router`) para classificar a intenção da mensagem:
+
+**Intenções possíveis:**
+- `ORDER_FLOW`: Pedir comida, alterar pedido, cancelar, ver cardápio, status
+- `INFO_FLOW`: Perguntas institucionais (horário, endereço, wi-fi) ou saudações vazias
+- `HUMAN_HANDOFF`: Cliente irritado ou pedindo atendente humano
+
+**Prompt de roteamento:**
+```
+# Contexto
+Você é o cérebro de triagem de um restaurante. Sua função é analisar a conversa e decidir para qual departamento encaminhar o cliente.
+
+# Instruções
+1. Analise o Histórico para entender o contexto
+2. Classifique a intenção atual em: ORDER_FLOW, INFO_FLOW ou HUMAN_HANDOFF
+
+# Saída
+Responda ESTRITAMENTE um JSON:
+{
+  "intent": "ORDER_FLOW" | "INFO_FLOW" | "HUMAN_HANDOFF",
+  "reason": "breve explicação"
+}
+```
+
+### 7. Agentes Especializados
+
+Após o roteamento, o workflow direciona para agentes especializados:
+
+#### INFO-AGENT
+- **Modelo:** `qwen/qwen3-vl-4b` ou `gemma-3-270m-it`
+- **Função:** Responder perguntas institucionais e saudações
+- **Memória:** PostgreSQL Chat Memory
+- **Tools:** `close_ticket` (para finalizar atendimento)
+
+#### RAG-AGENT
+- **Modelo:** `gemma-3-270m-it`
+- **Função:** Processar pedidos e consultas sobre cardápio
+- **Memória:** PostgreSQL Chat Memory
+- **Tools:** Todas as 12 tools disponíveis (criar pedido, consultar cardápio, etc.)
+
+### 8. Histórico e Resumo de Conversas
+
+O workflow utiliza PostgreSQL para armazenar e recuperar histórico:
+
+1. **Busca histórico** do ticket via SQL query
+2. **Processa mensagens** para extrair role (Cliente/Atendente) e conteúdo
+3. **Gera resumo** usando Summarization Chain com modelo `gemma-3-270m-it`
+4. **Formata últimas mensagens** do cliente (últimas 4, numeradas)
+5. **Inclui no contexto** do roteamento e dos agentes
+
+### 9. Geração de Resposta em Áudio (Opcional)
+
+O workflow pode gerar respostas em áudio usando Gemini TTS:
+
+1. **Verifica se deve gerar áudio** (se a resposta começa com "Audio: ")
+2. **Gera áudio** via Gemini TTS API
+3. **Converte formato** (PCM → Opus) usando ffmpeg
+4. **Envia áudio** via endpoint especial: `http://backend:3001/api/messages/audio`
+
+**Configuração do Gemini TTS:**
+- Voice: `Sulafat` (pt-BR)
+- Language: `pt-BR`
+- Efeitos: Reverb small room, ruídos leves
+- Velocidade: Levemente rápida e amigável
+
+### 10. Envio de Resposta
+
+#### Resposta em Texto
 - **Método:** POST
 - **URL:** `http://backend:3001/api/messages`
-- **Body (JSON):**
+- **Body:**
   ```json
   {
-    "ticketId": "{{ $json.ticketId }}",
-    "message": "{{ $json.resposta }}"
+    "ticketId": "{{ $('Dados').first().json.ticketId }}",
+    "message": "{{ $json.output }}"
   }
   ```
 
-**Nota:** O backend gerencia automaticamente o `sessionName` do WAHA, então você não precisa se preocupar com isso.
+#### Resposta em Áudio
+- **Método:** POST
+- **URL:** `http://backend:3001/api/messages/audio`
+- **Headers:** `x-api-key: backendsexy`
+- **Body:**
+  ```json
+  {
+    "ticketId": "{{ $('Dados').item.json.ticketId }}",
+    "audioBase64": "{{ $json.data }}",
+    "mimeType": "audio/opus"
+  }
+  ```
+
+### 11. Split de Mensagens Múltiplas
+
+O workflow suporta envio de múltiplas mensagens:
+1. **Split** da resposta por `\n\n` (parágrafos duplos)
+2. **Loop** sobre cada mensagem
+3. **Envio sequencial** com delay de 2 segundos entre mensagens (opcional)
 
 ### URL do Backend no n8n
 
 - **Dentro do Docker (recomendado):** `http://backend:3001`
 - **Do host (Windows/Mac/Linux):** `http://localhost:3001` ou `http://host.docker.internal:3001`
+- **Para áudio:** `http://backend:3001` (se disponível)
 
-### Exemplo de Workflow Completo com Tools
+### Exemplo de Workflow Completo
 
 1. **Webhook** - Recebe mensagens do backend
-2. **Set** - Extrai dados do payload (opcional)
-3. **HTTP Request (LM Studio/OpenAI)** - Processa mensagem com IA
-   - Inclua as tools disponíveis no prompt usando `GET /api/tools`
-   - Configure o modelo para usar function calling/tools
-4. **IF** - Verifica se a IA quer executar uma tool
-5. **HTTP Request** - Executa tool via `POST /api/tools/execute` (se necessário)
-6. **HTTP Request** - Envia resposta de volta para o backend via `POST /api/messages`
-7. **Code/Function** - Lógica adicional (opcional)
-
-### Exemplo de Prompt para IA com Tools
-
-```json
-{
-  "model": "llama-3.1-8b-instruct",
-  "messages": [
-    {
-      "role": "system",
-      "content": "Você é um assistente de restaurante. Você pode:\n- Consultar o cardápio\n- Criar pedidos\n- Consultar horários\n- Informar sobre promoções\n\nUse as tools disponíveis quando necessário. Sempre seja prestativo e amigável."
-    },
-    {
-      "role": "user",
-      "content": "{{ $json.message }}"
-    }
-  ],
-  "tools": [
-    // Inclua as tools retornadas por GET /api/tools
-  ],
-  "temperature": 0.7
-}
-```
+2. **Set Dados** - Extrai dados do payload
+3. **Switch** - Roteia por tipo de mídia (texto/áudio/imagem)
+4. **Processamento de Mídia** - Transcrição ou processamento multimodal
+5. **Buffer Redis** - Aguarda possíveis mensagens adicionais
+6. **Buscar Histórico** - Recupera histórico do PostgreSQL
+7. **Processar Histórico** - Formata e extrai informações relevantes
+8. **Resumir Conversa** - Gera resumo usando Summarization Chain
+9. **Roteamento** - Classifica intenção usando modelo especializado
+10. **Agentes** - Processa com agente apropriado (INFO ou RAG)
+11. **Geração de Áudio** - (Opcional) Gera resposta em áudio
+12. **Envio** - Envia resposta de volta para o backend
 
 ## 🧪 Testes
 
